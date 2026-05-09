@@ -6,7 +6,7 @@ def get_sqlserver_connection():
         conn = pyodbc.connect(
             "DRIVER={ODBC Driver 17 for SQL Server};"
             "SERVER=localhost\\SQLEXPRESS;"
-            "DATABASE=HUMAN;"
+            "DATABASE=HUMAN_2025;"
             "UID=sa;"
             "PWD=123456;",
             timeout=5
@@ -21,8 +21,8 @@ def get_mysql_connection():
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="doanbarin",
-            database="PAYROLL",
+            password="123456",
+            database="payroll_2026",
             autocommit=False
         )
         return conn
