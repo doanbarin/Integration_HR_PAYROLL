@@ -1,0 +1,30 @@
+📦 Company_X_Frontend_Project
+├── 📄 [UI-01] Login_Page.jsx                 (🔴🟢🔵🟡 Tất cả các Role đều truy cập để lấy Token)
+│
+└── 📂 Dashboard_Layout                       
+    ├── 📄 [UI-03] Dashboard_Home.jsx         (🔴🟢🔵🟡 Tất cả đều vào được, nhưng dữ liệu KPI hiển thị tuỳ quyền)
+    │
+    ├── 📂 1_System_Module                    
+    │   └── 📄 [UI-02] User_Management.jsx    (🔴 CHỈ ADMIN: Quản lý user, xem Audit Log, phân quyền)
+    │
+    ├── 📂 2_HR_Module                        
+    │   ├── 📄 [UI-04] Employee_List.jsx      (🔴🟢 Admin, HR Manager: Xem toàn bộ danh sách)
+    │   ├── 📄 [UI-05] Employee_Form.jsx      (🔴🟢 Admin, HR Manager: Thêm/Sửa thông tin)
+    │   ├── 📄 [UI-06] Employee_Profile.jsx   (🔴🟢🟡 Admin, HR Manager, VÀ Employee: Employee chỉ xem được hồ sơ của chính mình)
+    │   ├── 📄 [UI-07] Department_Mngt.jsx    (🔴🟢 Admin, HR Manager: Quản lý phòng ban)
+    │   └── 📄 [UI-08] Position_Mngt.jsx      (🔴🟢 Admin, HR Manager: Quản lý chức vụ)
+    │
+    ├── 📂 3_Payroll_Module                   
+    │   ├── 📄 [UI-09] Monthly_Payroll.jsx    (🔴🔵 Admin, Payroll Manager: Xem bảng lương tổng)
+    │   ├── 📄 [UI-11] Payslip_Modal.jsx      (🔴🔵🟡 Admin, Payroll Manager, VÀ Employee: Employee chỉ xem được phiếu lương của mình)
+    │   └── 📄 [UI-10] Salary_History.jsx     (🔴🔵🟡 Tương tự như trên, Employee chỉ xuất PDF lương của bản thân)
+    │
+    ├── 📂 4_Attendance_Module                
+    │   ├── 📄 [UI-12] Attendance_Data.jsx    (🔴🔵 Admin, Payroll Manager: Xem dữ liệu chấm công tổng)
+    │   └── 📄 [UI-13] Import_And_Leave.jsx   (🔴🔵🟡 Admin, Payroll import file Excel. Employee được dùng để nộp đơn xin nghỉ phép)
+    │
+    ├── 📂 5_Reports_Module                   
+    │   └── 📄 [UI-14] Report_Center.jsx      (🔴🟢🔵 Admin xem tất cả. HR chỉ xem báo cáo Nhân sự. Payroll chỉ xem báo cáo Chi phí lương)
+    │
+    └── 📂 6_Alerts_Module                    
+        └── 📄 [UI-15] Alerts_Bell.jsx        (🔴🟢🔵 Hệ thống tự động lọc cảnh báo: Báo động sai lệch lương gửi cho Payroll; Báo động sinh nhật/nhân sự gửi cho HR)
