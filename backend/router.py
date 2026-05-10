@@ -34,6 +34,106 @@ def get_positions():
     ]
     return jsonify(rows)
 
+# ===== CRUD Departments =====
+
+@router.route("/api/departments", methods=["POST"])
+def add_department():
+    data = request.get_json()
+    name = data.get("DepartmentName", "").strip()
+    if not name:
+        return jsonify({"status": "error", "msg": "Tên phòng ban không được trống"}), 400
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        cur.execute("INSERT INTO Departments (DepartmentName) VALUES (?)", (name,))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Thêm phòng ban thành công"})
+
+@router.route("/api/departments/<int:dept_id>", methods=["PUT"])
+def update_department(dept_id):
+    data = request.get_json()
+    name = data.get("DepartmentName", "").strip()
+    if not name:
+        return jsonify({"status": "error", "msg": "Tên phòng ban không được trống"}), 400
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        cur.execute("UPDATE Departments SET DepartmentName = ? WHERE DepartmentID = ?", (name, dept_id))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Cập nhật phòng ban thành công"})
+
+@router.route("/api/departments/<int:dept_id>", methods=["DELETE"])
+def delete_department(dept_id):
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        # Check ràng buộc: nếu có nhân viên thuộc phòng ban -> không xóa
+        cur.execute("SELECT COUNT(*) FROM Employees WHERE DepartmentID = ?", (dept_id,))
+        if cur.fetchone()[0] > 0:
+            return jsonify({"status": "error", "msg": "Không thể xoá – phòng ban có nhân viên"}), 400
+        cur.execute("DELETE FROM Departments WHERE DepartmentID = ?", (dept_id,))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Xoá phòng ban thành công"})
+
+# ===== CRUD Positions =====
+
+@router.route("/api/positions", methods=["POST"])
+def add_position():
+    data = request.get_json()
+    name = data.get("PositionName", "").strip()
+    if not name:
+        return jsonify({"status": "error", "msg": "Tên chức vụ không được trống"}), 400
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        cur.execute("INSERT INTO Positions (PositionName) VALUES (?)", (name,))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Thêm chức vụ thành công"})
+
+@router.route("/api/positions/<int:pos_id>", methods=["PUT"])
+def update_position(pos_id):
+    data = request.get_json()
+    name = data.get("PositionName", "").strip()
+    if not name:
+        return jsonify({"status": "error", "msg": "Tên chức vụ không được trống"}), 400
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        cur.execute("UPDATE Positions SET PositionName = ? WHERE PositionID = ?", (name, pos_id))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Cập nhật chức vụ thành công"})
+
+@router.route("/api/positions/<int:pos_id>", methods=["DELETE"])
+def delete_position(pos_id):
+    sql = get_sqlserver_connection()
+    cur = sql.cursor()
+    try:
+        # Check ràng buộc: nếu có nhân viên thuộc chức vụ -> không xóa
+        cur.execute("SELECT COUNT(*) FROM Employees WHERE PositionID = ?", (pos_id,))
+        if cur.fetchone()[0] > 0:
+            return jsonify({"status": "error", "msg": "Không thể xoá – chức vụ có nhân viên"}), 400
+        cur.execute("DELETE FROM Positions WHERE PositionID = ?", (pos_id,))
+        sql.commit()
+    except Exception as e:
+        sql.rollback()
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    return jsonify({"status": "success", "msg": "Xoá chức vụ thành công"})
+
 @router.route("/api/employees")
 def get_employees():
     sql = get_sqlserver_connection()
