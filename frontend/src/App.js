@@ -14,6 +14,7 @@ import SalaryHistory from './pages/SalaryHistory';
 import AttendanceData from './pages/AttendanceData';
 import ImportAndLeave from './pages/ImportAndLeave';
 import ReportCenter from './pages/ReportCenter';
+import AlertsBell from './pages/AlertsBell';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="attendance" element={<AttendanceData />} />
           <Route path="import-leave" element={<ImportAndLeave />} />
           <Route path="reports" element={<ReportCenter />} />
+          <Route path="alerts" element={<AlertsBell />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
