@@ -1,2 +1,6 @@
 package-lock.json
 backend/config.py
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
