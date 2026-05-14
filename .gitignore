@@ -33,10 +33,3 @@ frontend/build/
 Thumbs.db
 *.log
 
-# ========================
-# Auto-generated / dư thừa
-# ========================
-ENHANCEMENTS.md
-IMPLEMENTATION_SUMMARY.md
-QUICK_START.md
-TESTING_GUIDE.md
