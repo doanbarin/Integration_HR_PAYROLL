@@ -9,6 +9,50 @@ from functools import wraps
 
 router = Blueprint("router", __name__)
 
+# ===== BRUTE-FORCE PROTECTION =====
+# { username: {"count": int, "locked_until": datetime or None} }
+_failed_attempts = {}
+LOCKOUT_MAX_ATTEMPTS = 5
+LOCKOUT_DURATION_MINUTES = 15
+
+def _record_failed_attempt(username):
+    """Record a failed login attempt; return (is_now_locked, seconds_remaining).
+
+    Lock behaviour:
+      - Attempts 1-5  → counter increments, returns (False, 0)  → caller returns 401
+      - Attempt 5 sets locked_until so the NEXT (6th) request hits _is_locked_out → 429
+    """
+    now = datetime.utcnow()
+    entry = _failed_attempts.setdefault(username, {"count": 0, "locked_until": None})
+    entry["count"] += 1
+    if entry["count"] >= LOCKOUT_MAX_ATTEMPTS:
+        # Lock starts NOW; the 6th request will be caught by _is_locked_out()
+        entry["locked_until"] = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        entry["count"] = 0  # reset counter so next window is clean
+        # Return False here: this (the 5th) attempt still gets a 401
+        # The *next* attempt will be blocked by _is_locked_out() → 429
+        return False, 0
+    return False, 0
+
+def _is_locked_out(username):
+    """Return (locked: bool, seconds_remaining: int)."""
+    entry = _failed_attempts.get(username)
+    if not entry or not entry.get("locked_until"):
+        return False, 0
+    now = datetime.utcnow()
+    if now < entry["locked_until"]:
+        remaining = int((entry["locked_until"] - now).total_seconds())
+        return True, remaining
+    # Lock expired — clear it
+    entry["locked_until"] = None
+    entry["count"] = 0
+    return False, 0
+
+def _clear_failed_attempts(username):
+    """Clear failed attempts after a successful login."""
+    if username in _failed_attempts:
+        _failed_attempts[username] = {"count": 0, "locked_until": None}
+
 # ===== HELPER: Tạo mật khẩu tạm =====
 def generate_temp_password(length=12):
     """Tạo mật khẩu tạm gồm 12 ký tự: chữ hoa, chữ thường, số, ký tự đặc biệt"""
@@ -53,23 +97,32 @@ def login():
     data = request.get_json()
     username = data.get("Username", "").strip()
     password = data.get("Password", "").strip()
-    
+    source_ip = request.remote_addr
+
     if not username or not password:
         return jsonify({"status": "error", "msg": "Username và Password không được trống"}), 400
-    
+
     # ===== INPUT VALIDATION: Ngăn SQL Injection =====
     # Loại bỏ các ký tự đặc biệt nguy hiểm: -- ; ' " /* */
     dangerous_chars = ['--', ';', "'", '"', '/*', '*/']
     for char in dangerous_chars:
         if char in username or char in password:
-            source_ip = request.remote_addr
             log_action(username, "LOGIN_INJECTION_ATTEMPT", "/api/auth/login", "Failure", source_ip)
-            return jsonify({"status": "error", "msg": "Username hoặc Password chứa ký tự không hợp lệ"}), 400
-    
+            return jsonify({"status": "error", "msg": "Username hoặc Password chứa ký tự không hợp lệ"}), 401
+
+    # ===== BRUTE-FORCE CHECK =====
+    locked, remaining = _is_locked_out(username)
+    if locked:
+        log_action(username, "LOGIN_BRUTE_FORCE_BLOCKED", "/api/auth/login", "Failure", source_ip)
+        return jsonify({
+            "status": "error",
+            "msg": f"Tài khoản bị tạm khóa do đăng nhập sai nhiều lần. Thử lại sau {remaining} giây."
+        }), 429
+
     try:
         conn = get_taikhoan_connection()
         cur = conn.cursor()
-        
+
         # Tìm user theo Username (parameterized query - safe)
         cur.execute("""
             SELECT UserID, Username, PasswordHash, FullName, Role, IsActive, EmployeeID
@@ -77,37 +130,46 @@ def login():
             WHERE Username = ?
         """, (username,))
         user = cur.fetchone()
-        
+
         if not user:
-            source_ip = request.remote_addr
+            _record_failed_attempt(username)
             log_action(username, "LOGIN_FAILED", "/api/auth/login", "Failure", source_ip)
+            cur.close()
+            conn.close()
             return jsonify({"status": "error", "msg": "Tài khoản không tồn tại"}), 401
-        
-        user_id, db_username, password_hash, full_name, role, is_active, employee_id = user[0], user[1], user[2], user[3], user[4], user[5], user[6]
-        
+
+        user_id, db_username, password_hash, full_name, role, is_active, employee_id = (
+            user[0], user[1], user[2], user[3], user[4], user[5], user[6]
+        )
+
         # Kiểm tra tài khoản còn hoạt động
         if not is_active:
-            source_ip = request.remote_addr
-            log_action(username, "LOGIN_BLOCKED", "/api/auth/login", "Failure", source_ip)
-            return jsonify({"status": "error", "msg": "Tài khoản đã bị khóa"}), 403
-        
+            log_action(username, "LOGIN_BLOCKED", "/api/auth/login", "Forbidden", source_ip)
+            cur.close()
+            conn.close()
+            return jsonify({"status": "error", "msg": "Tài khoản đã bị vô hiệu hóa"}), 403
+
         # Kiểm tra password (bcrypt.checkpw() đã an toàn, không bị SQL injection)
         if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
-            source_ip = request.remote_addr
+            _record_failed_attempt(username)
             log_action(username, "LOGIN_FAILED", "/api/auth/login", "Failure", source_ip)
+            cur.close()
+            conn.close()
             return jsonify({"status": "error", "msg": "Mật khẩu không chính xác"}), 401
-        
+
+        # Đăng nhập thành công — xóa failed attempts
+        _clear_failed_attempts(username)
+
         # Tạo JWT token
         from app import app
         token = create_token(user_id, db_username, role, app.config['SECRET_KEY'], employee_id)
-        
+
         # Ghi log thành công
-        source_ip = request.remote_addr
         log_action(username, "LOGIN", "/api/auth/login", "Success", source_ip)
-        
+
         cur.close()
         conn.close()
-        
+
         return jsonify({
             "status": "success",
             "msg": "Đăng nhập thành công",
@@ -120,7 +182,7 @@ def login():
                 "EmployeeID": employee_id
             }
         }), 200
-        
+
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
 
