@@ -748,7 +748,7 @@ def get_employees():
     sql = get_sqlserver_connection()
     cur = sql.cursor()
     cur.execute("""
-        SELECT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName
+        SELECT DISTINCT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName
         FROM Employees e
         LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
         LEFT JOIN Positions p ON e.PositionID = p.PositionID
@@ -934,7 +934,11 @@ def get_salaries():
                        s.Deductions, s.NetSalary, s.CreatedAt
                 FROM salaries s
                 LEFT JOIN employees_payroll ep ON s.EmployeeID = ep.EmployeeID
-                LEFT JOIN departments_payroll dp ON ep.DepartmentID = dp.DepartmentID
+                LEFT JOIN (
+                    SELECT DepartmentID, MIN(DepartmentName) AS DepartmentName
+                    FROM departments_payroll
+                    GROUP BY DepartmentID
+                ) dp ON ep.DepartmentID = dp.DepartmentID
                 WHERE s.SalaryMonth = %s
                 ORDER BY s.EmployeeID
             """, (month + "-01",))
@@ -946,10 +950,21 @@ def get_salaries():
                        s.Deductions, s.NetSalary, s.CreatedAt
                 FROM salaries s
                 LEFT JOIN employees_payroll ep ON s.EmployeeID = ep.EmployeeID
-                LEFT JOIN departments_payroll dp ON ep.DepartmentID = dp.DepartmentID
+                LEFT JOIN (
+                    SELECT DepartmentID, MIN(DepartmentName) AS DepartmentName
+                    FROM departments_payroll
+                    GROUP BY DepartmentID
+                ) dp ON ep.DepartmentID = dp.DepartmentID
                 ORDER BY s.SalaryMonth DESC, s.EmployeeID
             """)
-        rows = cur.fetchall()
+        raw_rows = cur.fetchall()
+        # Deduplicate by SalaryID (guard against any remaining JOIN multiplication)
+        seen_ids = set()
+        rows = []
+        for r in raw_rows:
+            if r["SalaryID"] not in seen_ids:
+                seen_ids.add(r["SalaryID"])
+                rows.append(r)
         # Convert Decimal/date to serializable
         for r in rows:
             r["BaseSalary"] = float(r["BaseSalary"]) if r["BaseSalary"] else 0
@@ -979,7 +994,11 @@ def get_attendance():
                        a.WorkDays, a.AbsentDays, a.LeaveDays,
                        a.AttendanceMonth, a.CreatedAt
                 FROM attendance a
-                LEFT JOIN employees_payroll ep ON a.EmployeeID = ep.EmployeeID
+                LEFT JOIN (
+                    SELECT EmployeeID, MIN(FullName) AS FullName
+                    FROM employees_payroll
+                    GROUP BY EmployeeID
+                ) ep ON a.EmployeeID = ep.EmployeeID
                 WHERE a.AttendanceMonth = %s
                 ORDER BY a.EmployeeID
             """, (month + "-01",))
@@ -989,10 +1008,21 @@ def get_attendance():
                        a.WorkDays, a.AbsentDays, a.LeaveDays,
                        a.AttendanceMonth, a.CreatedAt
                 FROM attendance a
-                LEFT JOIN employees_payroll ep ON a.EmployeeID = ep.EmployeeID
+                LEFT JOIN (
+                    SELECT EmployeeID, MIN(FullName) AS FullName
+                    FROM employees_payroll
+                    GROUP BY EmployeeID
+                ) ep ON a.EmployeeID = ep.EmployeeID
                 ORDER BY a.AttendanceMonth DESC, a.EmployeeID
             """)
-        rows = cur.fetchall()
+        raw_rows = cur.fetchall()
+        # Deduplicate by AttendanceID (guard against any remaining JOIN multiplication)
+        seen_ids = set()
+        rows = []
+        for r in raw_rows:
+            if r["AttendanceID"] not in seen_ids:
+                seen_ids.add(r["AttendanceID"])
+                rows.append(r)
         for r in rows:
             r["AttendanceMonth"] = str(r["AttendanceMonth"]) if r["AttendanceMonth"] else ""
             r["CreatedAt"] = str(r["CreatedAt"]) if r["CreatedAt"] else ""
@@ -1180,3 +1210,37 @@ def get_alerts():
             sql.close()
         if my:
             my.close()
+
+# ===== DIVIDENDS APIs =====
+
+@router.route("/api/dividends")
+def get_dividends():
+    """Lấy danh sách cổ tức từ SQL Server"""
+    sql = None
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor()
+        cur.execute("""
+            SELECT d.DividendID, d.EmployeeID, e.FullName, dept.DepartmentName, d.DividendAmount, d.DividendDate
+            FROM Dividends d
+            LEFT JOIN Employees e ON d.EmployeeID = e.EmployeeID
+            LEFT JOIN Departments dept ON e.DepartmentID = dept.DepartmentID
+            ORDER BY d.DividendDate DESC, d.EmployeeID
+        """)
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "DividendID": r[0],
+                "EmployeeID": r[1],
+                "FullName": r[2] if r[2] else "",
+                "DepartmentName": r[3] if r[3] else "Chưa phân bổ",
+                "DividendAmount": float(r[4]) if r[4] else 0,
+                "DividendDate": str(r[5]) if r[5] else ""
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+    finally:
+        if sql:
+            sql.close()

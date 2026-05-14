@@ -14,6 +14,7 @@ function DashboardHome() {
     alertCount: 0
   });
   const [recentEmployees, setRecentEmployees] = useState([]);
+  const [allEmployees, setAllEmployees] = useState([]);
   const [deptData, setDeptData] = useState([]);
   const [salaryData, setSalaryData] = useState([]);
   const [attendSummary, setAttendSummary] = useState([]);
@@ -25,9 +26,10 @@ function DashboardHome() {
       .then(data => {
         if (Array.isArray(data)) {
           setStats(prev => ({ ...prev, totalEmployees: data.length }));
+          setAllEmployees(data);
           setRecentEmployees(data.slice(-5).reverse());
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
     // Departments from SQL Server
     fetch(`${API}/departments`)
@@ -37,7 +39,7 @@ function DashboardHome() {
           setStats(prev => ({ ...prev, departments: data.length }));
           setDeptData(data);
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
     // Payroll summary from MySQL
     fetch(`${API}/payroll-summary`)
@@ -51,13 +53,13 @@ function DashboardHome() {
             : 0,
           attendanceRate: data.attendanceRate || 0
         }));
-      }).catch(() => {});
+      }).catch(() => { });
 
     // Salaries for chart
     fetch(`${API}/salaries`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setSalaryData(data); })
-      .catch(() => {});
+      .catch(() => { });
 
     // Attendance for summary
     fetch(`${API}/attendance`)
@@ -69,14 +71,14 @@ function DashboardHome() {
           const totalLeave = data.reduce((s, d) => s + (d.LeaveDays || 0), 0);
           setStats(prev => ({ ...prev, totalAbsent, totalLeave }));
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
     // Alerts count
     fetch(`${API}/alerts`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) setStats(prev => ({ ...prev, alertCount: data.length }));
-      }).catch(() => {});
+      }).catch(() => { });
   }, []);
 
   const formatVND = (n) => Number(n).toLocaleString('vi-VN') + ' ₫';
@@ -92,8 +94,11 @@ function DashboardHome() {
 
   // Employee count by department
   const empByDept = {};
-  recentEmployees.forEach(() => {}); // just placeholder
-  // We'll use full employee list - but we only have recent 5 ... let's use API data
+  allEmployees.forEach(emp => {
+    const dept = emp.Department || 'Khác';
+    empByDept[dept] = (empByDept[dept] || 0) + 1;
+  });
+  const maxEmpInDept = Math.max(...Object.values(empByDept), 1);
   const deptColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 
   // Attendance summary
@@ -104,32 +109,34 @@ function DashboardHome() {
 
   const kpiCards = [
     {
+      icon: '📅', label: 'Ngày Nghỉ / Vắng',
+      value: `${stats.totalLeave + stats.totalAbsent}`,
+      change: `${stats.totalLeave} nghỉ phép • ${stats.totalAbsent} vắng`,
+      color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',
+      cardBg: '#fffbeb'
+    },
+    {
+      icon: '🔔', label: 'Cảnh Báo',
+      value: stats.alertCount,
+      change: '',
+      color: '#000000ff', bg: 'rgba(239,68,68,0.1)',
+      cardBg: '#ff0000ff'
+    },
+    {
       icon: '👥', label: 'Tổng Nhân Viên', value: stats.totalEmployees,
-      change: 'Từ SQL Server', color: '#4f46e5', bg: 'rgba(79,70,229,0.1)'
+      change: '', color: '#4f46e5', bg: 'rgba(79,70,229,0.1)'
     },
     {
       icon: '💰', label: 'Tổng Chi Phí Lương',
       value: stats.totalSalary > 0 ? formatVND(stats.totalSalary) : '---',
-      change: stats.totalSalary > 0 ? 'Từ MySQL' : 'Chưa có dữ liệu',
+      change: stats.totalSalary > 0 ? '' : 'Chưa có dữ liệu',
       color: '#10b981', bg: 'rgba(16,185,129,0.1)'
     },
     {
       icon: '📊', label: 'Lương Trung Bình',
       value: stats.avgSalary > 0 ? formatVND(stats.avgSalary) : '---',
-      change: stats.avgSalary > 0 ? 'Từ MySQL' : 'Chưa có dữ liệu',
+      change: stats.avgSalary > 0 ? '' : 'Chưa có dữ liệu',
       color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)'
-    },
-    {
-      icon: '📅', label: 'Ngày Nghỉ / Vắng',
-      value: `${stats.totalLeave + stats.totalAbsent}`,
-      change: `${stats.totalLeave} nghỉ phép • ${stats.totalAbsent} vắng`,
-      color: '#f59e0b', bg: 'rgba(245,158,11,0.1)'
-    },
-    {
-      icon: '🔔', label: 'Cảnh Báo',
-      value: stats.alertCount,
-      change: 'Từ hệ thống',
-      color: '#ef4444', bg: 'rgba(239,68,68,0.1)'
     }
   ];
 
@@ -138,8 +145,8 @@ function DashboardHome() {
       {/* KPI Cards */}
       <div className="row g-3 mb-4">
         {kpiCards.map((card, i) => (
-          <div className={i < 3 ? "col-md-4" : (i === 3 ? "col-md-6" : "col-md-6")} key={i}>
-            <div className="stat-card">
+          <div className={i < 2 ? "col-md-6" : "col-md-4"} key={i}>
+            <div className="stat-card" style={card.cardBg ? { backgroundColor: card.cardBg } : {}}>
               <div className="d-flex justify-content-between align-items-start mb-2">
                 <div className="stat-icon" style={{ background: card.bg, color: card.color }}>
                   {card.icon}
@@ -149,7 +156,7 @@ function DashboardHome() {
                 {card.value}
               </div>
               <div className="stat-label">{card.label}</div>
-              <div className="stat-change text-muted mt-1" style={{fontSize: 11}}>
+              <div className="stat-change text-muted mt-1" style={{ fontSize: 11 }}>
                 {card.change}
               </div>
             </div>
@@ -169,10 +176,10 @@ function DashboardHome() {
               {salaryChartEntries.length === 0 ? (
                 <p className="text-center text-muted py-4">Chưa có dữ liệu</p>
               ) : (
-                <div style={{display: 'flex', alignItems: 'flex-end', gap: 8, height: 180, padding: '0 10px'}}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 180, padding: '0 10px' }}>
                   {salaryChartEntries.map(([month, total], i) => (
-                    <div key={month} style={{flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4}}>
-                      <span style={{fontSize: 9, color: '#64748b', fontWeight: 600}}>
+                    <div key={month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 9, color: '#64748b', fontWeight: 600 }}>
                         {formatVND(total).replace(' ₫', '')}
                       </span>
                       <div style={{
@@ -183,7 +190,7 @@ function DashboardHome() {
                         minHeight: 20,
                         transition: 'height 0.5s ease'
                       }} />
-                      <span style={{fontSize: 10, color: '#94a3b8', fontWeight: 500}}>{month}</span>
+                      <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>{month}</span>
                     </div>
                   ))}
                 </div>
@@ -204,22 +211,27 @@ function DashboardHome() {
               ) : (
                 <div>
                   {/* Simple horizontal bars */}
-                  {deptData.slice(0, 6).map((d, i) => (
-                    <div key={d.DepartmentID} className="mb-2">
-                      <div className="d-flex justify-content-between" style={{fontSize: 11, fontWeight: 500}}>
-                        <span style={{color: '#334155'}}>{d.DepartmentName}</span>
+                  {deptData.slice(0, 6).map((d, i) => {
+                    const count = empByDept[d.DepartmentName] || 0;
+                    const pct = maxEmpInDept > 0 ? (count / maxEmpInDept) * 100 : 0;
+                    return (
+                      <div key={d.DepartmentID} className="mb-2">
+                        <div className="d-flex justify-content-between" style={{ fontSize: 11, fontWeight: 500 }}>
+                          <span style={{ color: '#334155' }}>{d.DepartmentName}</span>
+                          <span style={{ color: '#94a3b8' }}>{count} NV</span>
+                        </div>
+                        <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, marginTop: 2 }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${Math.max(5, pct)}%`,
+                            background: deptColors[i % deptColors.length],
+                            borderRadius: 3,
+                            transition: 'width 0.5s ease'
+                          }} />
+                        </div>
                       </div>
-                      <div style={{height: 6, background: '#f1f5f9', borderRadius: 3, marginTop: 2}}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.max(20, Math.random() * 100)}%`,
-                          background: deptColors[i % deptColors.length],
-                          borderRadius: 3,
-                          transition: 'width 0.5s ease'
-                        }} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -237,9 +249,9 @@ function DashboardHome() {
                 <div style={{
                   width: 100, height: 100, borderRadius: '50%', margin: '0 auto',
                   background: `conic-gradient(
-                    #10b981 0deg ${(totalWorkDays/totalAllDays)*360}deg,
-                    #f59e0b ${(totalWorkDays/totalAllDays)*360}deg ${((totalWorkDays+totalLeaveDays)/totalAllDays)*360}deg,
-                    #ef4444 ${((totalWorkDays+totalLeaveDays)/totalAllDays)*360}deg 360deg
+                    #10b981 0deg ${(totalWorkDays / totalAllDays) * 360}deg,
+                    #f59e0b ${(totalWorkDays / totalAllDays) * 360}deg ${((totalWorkDays + totalLeaveDays) / totalAllDays) * 360}deg,
+                    #ef4444 ${((totalWorkDays + totalLeaveDays) / totalAllDays) * 360}deg 360deg
                   )`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   position: 'relative'
@@ -253,17 +265,17 @@ function DashboardHome() {
                   </div>
                 </div>
               </div>
-              <div style={{fontSize: 11}}>
+              <div style={{ fontSize: 11 }}>
                 <div className="d-flex align-items-center gap-2 mb-1">
-                  <span style={{width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0}} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
                   <span>Ngày công: {totalWorkDays}</span>
                 </div>
                 <div className="d-flex align-items-center gap-2 mb-1">
-                  <span style={{width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', flexShrink: 0}} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
                   <span>Nghỉ phép: {totalLeaveDays}</span>
                 </div>
                 <div className="d-flex align-items-center gap-2">
-                  <span style={{width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0}} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
                   <span>Vắng: {totalAbsentDays}</span>
                 </div>
               </div>
