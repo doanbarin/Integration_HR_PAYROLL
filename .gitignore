@@ -1,1 +1,34 @@
+# ========================
+# Python
+# ========================
+backend/config.py
+backend/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# ========================
+# Node / Frontend
+# ========================
 package-lock.json
+frontend/node_modules/
+node_modules/
+frontend/.cache/
+frontend/build/
+
+# ========================
+# OS / Editor
+# ========================
+.DS_Store
+Thumbs.db
+*.log
+
+# ========================
+# Auto-generated / dư thừa
+# ========================
+ENHANCEMENTS.md
+IMPLEMENTATION_SUMMARY.md
+QUICK_START.md
+TESTING_GUIDE.md
