@@ -1,14 +1,34 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
+
+const Toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 3000,
+  timerProgressBar: true,
+  didOpen: (toast) => {
+    toast.addEventListener('mouseenter', Swal.stopTimer)
+    toast.addEventListener('mouseleave', Swal.resumeTimer)
+  }
+});
 
 function UserManagement() {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('');
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [modalError, setModalError] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [viewPasswordUser, setViewPasswordUser] = useState(null);
@@ -89,6 +109,7 @@ function UserManagement() {
 
   const handleAddClick = () => {
     setEditingUser(null);
+    setModalError('');
     setFormData({
       Username: '',
       Password: '',
@@ -103,12 +124,14 @@ function UserManagement() {
 
   const handleEditClick = (user) => {
     setEditingUser(user);
+    setModalError('');
     setFormData({
       Username: user.Username,
       Password: '',
       FullName: user.FullName,
       Role: user.Role,
-      IsActive: user.IsActive,
+      // Normalize to 1/0 regardless of whether DB returns True/False or 1/0
+      IsActive: user.IsActive ? 1 : 0,
       EmployeeID: user.EmployeeID || ''
     });
     const emp = employees.find(e => e.EmployeeID === user.EmployeeID);
@@ -122,22 +145,33 @@ function UserManagement() {
       setEmpSearchText('');
       return;
     }
-    
+
     const emp = employees.find(e => e.EmployeeID.toString() === empId.toString());
     const existingUser = users.find(u => u.EmployeeID?.toString() === empId.toString());
 
     if (existingUser) {
-      if (window.confirm(`Nhân viên ${emp.FullName} đã có tài khoản (${existingUser.Username}). Bạn có muốn chuyển sang giao diện chỉnh sửa tài khoản này không?`)) {
-        handleEditClick(existingUser);
-      } else {
-        // Reset select
-        setFormData({ ...formData, EmployeeID: '', FullName: '' });
-        setEmpSearchText('');
-      }
+      Swal.fire({
+        title: 'Tài khoản đã tồn tại',
+        text: `Nhân viên ${emp.FullName} đã có tài khoản (${existingUser.Username}). Bạn có muốn chuyển sang giao diện chỉnh sửa tài khoản này không?`,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Đồng ý',
+        cancelButtonText: 'Hủy'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          handleEditClick(existingUser);
+        } else {
+          // Reset select
+          setFormData({ ...formData, EmployeeID: '', FullName: '' });
+          setEmpSearchText('');
+        }
+      });
     } else {
-      setFormData({ 
-        ...formData, 
-        EmployeeID: empId, 
+      setFormData({
+        ...formData,
+        EmployeeID: empId,
         FullName: emp ? emp.FullName : '',
         Username: emp ? emp.Email?.split('@')[0] || '' : '' // Gợi ý username từ email nếu có
       });
@@ -147,9 +181,10 @@ function UserManagement() {
   };
 
   const handleSaveUser = async () => {
+    setModalError('');
     try {
       if (!formData.FullName || !formData.Username) {
-        alert('Vui lòng nhập đầy đủ thông tin');
+        Swal.fire('Lỗi', 'Vui lòng nhập đầy đủ thông tin.', 'error');
         return;
       }
 
@@ -165,17 +200,17 @@ function UserManagement() {
         });
         const data = await response.json();
         if (response.ok) {
-          alert('Cập nhật user thành công');
+          Toast.fire({ icon: 'success', title: 'Cập nhật user thành công' });
           setShowModal(false);
           fetchUsers();
           fetchLogs();
         } else {
-          alert('Lỗi: ' + data.msg);
+          Swal.fire('Lỗi', data.msg || 'Có lỗi xảy ra', 'error');
         }
       } else {
         // Create new user
         if (!formData.Password) {
-          alert('Vui lòng nhập mật khẩu');
+          Swal.fire('Lỗi', 'Vui lòng nhập mật khẩu.', 'error');
           return;
         }
         const response = await fetch(`${API_URL}/api/users`, {
@@ -188,65 +223,106 @@ function UserManagement() {
         });
         const data = await response.json();
         if (response.ok) {
-          alert('Tạo user thành công');
+          Toast.fire({ icon: 'success', title: 'Tạo user thành công' });
           setShowModal(false);
           fetchUsers();
           fetchLogs();
         } else {
-          alert('Lỗi: ' + data.msg);
+          // Hiển thị lỗi ra giữa màn hình thay vì im lặng
+          Swal.fire('Lỗi thêm User', data.msg || 'Tên đăng nhập đã tồn tại', 'error');
         }
       }
     } catch (err) {
-      alert('Lỗi: ' + err.message);
+      Swal.fire('Lỗi', err.message, 'error');
     }
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm('Bạn chắc chắn muốn xóa user này?')) {
-      try {
-        const response = await fetch(`${API_URL}/api/users/${userId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
+    Swal.fire({
+      title: 'Xóa user?',
+      text: "Hành động này không thể hoàn tác!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Xóa',
+      cancelButtonText: 'Hủy'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          const currentUser = localStorage.getItem('user')
+            ? JSON.parse(localStorage.getItem('user')).Username
+            : 'admin';
+          const response = await fetch(`${API_URL}/api/users/${userId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ DeletedBy: currentUser })
+          });
+          const data = await response.json();
+          if (response.ok) {
+            Toast.fire({ icon: 'success', title: 'Xóa user thành công' });
+            fetchUsers();
+            fetchLogs();
+          } else {
+            Swal.fire('Lỗi', data.msg, 'error');
           }
-        });
-        const data = await response.json();
-        if (response.ok) {
-          alert('Xóa user thành công');
-          fetchUsers();
-          fetchLogs();
-        } else {
-          alert('Lỗi: ' + data.msg);
+        } catch (err) {
+          Swal.fire('Lỗi', err.message, 'error');
         }
-      } catch (err) {
-        alert('Lỗi: ' + err.message);
       }
-    }
+    });
   };
 
-  const handleResetPassword = async (userId, userName) => {
-    if (window.confirm(`Bạn chắc chắn muốn reset mật khẩu cho ${userName}?`)) {
-      try {
-        const response = await fetch(`${API_URL}/api/users/${userId}/reset-password`, {
+  // Open the manual change-password modal (as user requested)
+  const handleResetPassword = (userId, userName) => {
+    setResetPasswordUser({ UserID: userId, Username: userName });
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetPasswordError('');
+    setShowResetModal(true);
+  };
+
+  const handleSaveNewPassword = async () => {
+    setResetPasswordError('');
+    if (!newPassword || newPassword.length < 6) {
+      setResetPasswordError('Mật khẩu mới phải ít nhất 6 ký tự.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetPasswordError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${API_URL}/api/users/${resetPasswordUser.UserID}/reset-password`,
+        {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ ResetBy: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).Username : 'admin' })
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setResetUser({ UserID: userId, Username: userName });
-          setTempPassword(data.tempPassword);
-          setShowResetModal(true);
-          fetchLogs();
-        } else {
-          alert('Lỗi: ' + data.msg);
+          body: JSON.stringify({
+            NewPassword: newPassword,
+            ResetBy: localStorage.getItem('user')
+              ? JSON.parse(localStorage.getItem('user')).Username
+              : 'admin'
+          })
         }
-      } catch (err) {
-        alert('Lỗi: ' + err.message);
+      );
+      const data = await response.json();
+      if (response.ok) {
+        Swal.fire('Thành công', `Đặt mật khẩu mới thành công cho ${resetPasswordUser.Username}!`, 'success');
+        setShowResetModal(false);
+        fetchUsers();
+        fetchLogs();
+      } else {
+        setResetPasswordError('Lỗi: ' + data.msg);
       }
+    } catch (err) {
+      setResetPasswordError('Lỗi: ' + err.message);
     }
   };
 
@@ -277,7 +353,7 @@ function UserManagement() {
 
   const handleChangePermission = async () => {
     if (!permissionUser) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/api/users/${permissionUser.UserID}`, {
         method: 'PUT',
@@ -294,15 +370,15 @@ function UserManagement() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert(`Cập nhật quyền thành công (${permissionUser.Username} → ${newRole})`);
+        Toast.fire({ icon: 'success', title: `Cập nhật quyền thành công (${permissionUser.Username} → ${newRole})` });
         setShowPermissionModal(false);
         fetchUsers();
         fetchLogs();
       } else {
-        alert('Lỗi: ' + data.msg);
+        Swal.fire('Lỗi', data.msg, 'error');
       }
     } catch (err) {
-      alert('Lỗi: ' + err.message);
+      Swal.fire('Lỗi', err.message, 'error');
     }
   };
 
@@ -321,11 +397,16 @@ function UserManagement() {
     'CHANGE_PASSWORD': { bg: '#faf5ff', color: '#7c3aed', icon: '🔐' },
   };
 
-  const filtered = users.filter(u =>
-    u.Username.toLowerCase().includes(search.toLowerCase()) ||
-    u.FullName.toLowerCase().includes(search.toLowerCase()) ||
-    u.Role.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = users.filter(u => {
+    const matchSearch = u.Username.toLowerCase().includes(search.toLowerCase()) ||
+      u.FullName.toLowerCase().includes(search.toLowerCase()) ||
+      u.Role.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === 'all' ||
+      (statusFilter === 'active' && u.IsActive) ||
+      (statusFilter === 'inactive' && !u.IsActive);
+    const matchRole = roleFilter === '' || u.Role === roleFilter;
+    return matchSearch && matchStatus && matchRole;
+  });
 
   const roleCounts = {};
   users.forEach(u => { roleCounts[u.Role] = (roleCounts[u.Role] || 0) + 1; });
@@ -336,12 +417,12 @@ function UserManagement() {
     return parts[parts.length - 1];
   };
 
-  const sortedEmployees = [...employees].sort((a, b) => 
+  const sortedEmployees = [...employees].sort((a, b) =>
     getFirstName(a.FullName).localeCompare(getFirstName(b.FullName), 'vi')
   );
 
-  const filteredEmployees = sortedEmployees.filter(emp => 
-    emp.FullName.toLowerCase().includes(empSearchText.toLowerCase()) || 
+  const filteredEmployees = sortedEmployees.filter(emp =>
+    emp.FullName.toLowerCase().includes(empSearchText.toLowerCase()) ||
     (emp.Department && emp.Department.toLowerCase().includes(empSearchText.toLowerCase())) ||
     (emp.Position && emp.Position.toLowerCase().includes(empSearchText.toLowerCase()))
   );
@@ -356,12 +437,23 @@ function UserManagement() {
       <div className="row g-3 mb-4">
         {Object.entries(roleColors).map(([role, style]) => (
           <div className="col-md-3" key={role}>
-            <div className="stat-card">
+            <div 
+              className="stat-card"
+              onClick={() => setRoleFilter(roleFilter === role ? '' : role)}
+              style={{
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                border: roleFilter === role ? `2px solid ${style.color}` : '2px solid transparent',
+                transform: roleFilter === role ? 'translateY(-3px)' : 'none',
+                boxShadow: roleFilter === role ? `0 8px 16px ${style.color}30` : ''
+              }}
+              title={roleFilter === role ? `Bỏ lọc ${role}` : `Lọc theo ${role}`}
+            >
               <div className="d-flex align-items-center gap-2 mb-2">
-                <span style={{fontSize: 20}}>{style.icon}</span>
-                <span className="stat-label" style={{fontSize: 13, fontWeight: 600}}>{role}</span>
+                <span style={{ fontSize: 20 }}>{style.icon}</span>
+                <span className="stat-label" style={{ fontSize: 13, fontWeight: 600 }}>{role}</span>
               </div>
-              <div className="stat-value" style={{color: style.color}}>{roleCounts[role] || 0}</div>
+              <div className="stat-value" style={{ color: style.color }}>{roleCounts[role] || 0}</div>
               <div className="stat-label">Tài khoản</div>
             </div>
           </div>
@@ -375,11 +467,21 @@ function UserManagement() {
         <div className="card-header-custom">
           <h5>🔐 Quản Lý Tài Khoản & Phân Quyền ({filtered.length})</h5>
           <div className="d-flex gap-2">
+            <select
+              className="form-select form-select-sm"
+              style={{ width: 150 }}
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="all">Trạng thái</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Bị khóa</option>
+            </select>
             <input
               type="text"
               className="form-control form-control-sm"
               placeholder="🔍 Tìm kiếm..."
-              style={{width: 220}}
+              style={{ width: 200 }}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -427,11 +529,11 @@ function UserManagement() {
                     <td>
                       <div><strong>{u.FullName}</strong></div>
                       {u.EmployeeID ? (
-                        <span style={{fontSize: 11, color: '#16a34a', background: '#f0fdf4', padding: '2px 6px', borderRadius: 4}}>
+                        <span style={{ fontSize: 11, color: '#16a34a', background: '#f0fdf4', padding: '2px 6px', borderRadius: 4 }}>
                           ✔ Đã lk NV #{u.EmployeeID}
                         </span>
                       ) : (
-                        <span style={{fontSize: 11, color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: 4}}>
+                        <span style={{ fontSize: 11, color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: 4 }}>
                           ❌ Chưa lk NV
                         </span>
                       )}
@@ -452,27 +554,27 @@ function UserManagement() {
                         ● {u.IsActive ? 'Hoạt động' : 'Đã khóa'}
                       </span>
                     </td>
-                    <td className="text-muted" style={{fontSize: 12}}>{new Date(u.CreatedAt).toLocaleDateString('vi-VN')}</td>
-                    <td style={{fontSize: 12}}>
+                    <td className="text-muted" style={{ fontSize: 12 }}>{new Date(u.CreatedAt).toLocaleDateString('vi-VN')}</td>
+                    <td style={{ fontSize: 12 }}>
                       {u.TempPasswordPlain ? (
                         <button
                           className="btn btn-sm btn-outline-secondary"
                           onClick={() => handleShowPassword(u)}
                           title="Xem mật khẩu tạm"
-                          style={{fontSize: 11}}
+                          style={{ fontSize: 11 }}
                         >
                           👁️ Xem
                         </button>
                       ) : (
-                        <span className="text-muted" style={{fontSize: 11}}>—</span>
+                        <span className="text-muted" style={{ fontSize: 11 }}>—</span>
                       )}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
-                        <button className="btn btn-sm btn-outline-primary" onClick={() => handleEditClick(u)} title="Sửa" style={{padding:'3px 8px'}}>✏️</button>
-                        <button className="btn btn-sm btn-outline-info" onClick={() => handleOpenPermissionModal(u)} title="Phân quyền" style={{padding:'3px 8px'}}>🔐</button>
-                        <button className="btn btn-sm btn-outline-warning" onClick={() => handleResetPassword(u.UserID, u.Username)} title="Reset Password" style={{padding:'3px 8px'}}>🔑</button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => handleDeleteUser(u.UserID)} title="Xoá" style={{padding:'3px 8px'}}>🗑️</button>
+                        <button className="btn btn-sm btn-outline-primary" onClick={() => handleEditClick(u)} title="Sửa" style={{ padding: '3px 8px' }}>✏️</button>
+                        <button className="btn btn-sm btn-outline-info" onClick={() => handleOpenPermissionModal(u)} title="Phân quyền" style={{ padding: '3px 8px' }}>🔐</button>
+                        <button className="btn btn-sm btn-outline-warning" onClick={() => handleResetPassword(u.UserID, u.Username)} title="Reset Password" style={{ padding: '3px 8px' }}>🔑</button>
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => handleDeleteUser(u.UserID)} title="Xoá" style={{ padding: '3px 8px' }}>🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -487,7 +589,7 @@ function UserManagement() {
       <div className="content-card mt-3">
         <div className="card-header-custom">
           <h5>📜 Audit Log</h5>
-          <span className="badge-status" style={{background: 'rgba(79,70,229,0.1)', color: '#4f46e5', fontSize: 11}}>
+          <span className="badge-status" style={{ background: 'rgba(79,70,229,0.1)', color: '#4f46e5', fontSize: 11 }}>
             {logs.length} bản ghi gần đây
           </span>
         </div>
@@ -511,7 +613,7 @@ function UserManagement() {
                   <div className="flex-grow-1">
                     <div className="d-flex justify-content-between align-items-start">
                       <div>
-                        <strong style={{fontSize: 13}}>{log.Action}</strong>
+                        <strong style={{ fontSize: 13 }}>{log.Action}</strong>
                         <span className="badge-status ms-2" style={{
                           background: '#e0e7ff',
                           color: '#4f46e5',
@@ -523,9 +625,9 @@ function UserManagement() {
                           fontSize: 10
                         }}>{log.ResultStatus}</span>
                       </div>
-                      <span style={{fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap'}}>{new Date(log.Timestamp).toLocaleString('vi-VN')}</span>
+                      <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>{new Date(log.Timestamp).toLocaleString('vi-VN')}</span>
                     </div>
-                    <p className="mb-0 mt-1" style={{fontSize: 12, color: '#64748b'}}>{log.Endpoint} | IP: {log.SourceIP}</p>
+                    <p className="mb-0 mt-1" style={{ fontSize: 12, color: '#64748b' }}>{log.Endpoint} | IP: {log.SourceIP}</p>
                   </div>
                 </div>
               );
@@ -536,8 +638,8 @@ function UserManagement() {
 
       {/* Modal Add/Edit User */}
       {showModal && (
-        <div className="modal" style={{display: 'block', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-          <div className="modal-dialog" style={{marginTop: '100px'}}>
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog" style={{ marginTop: '100px' }}>
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">{editingUser ? 'Sửa User' : 'Thêm User Mới'}</h5>
@@ -547,21 +649,21 @@ function UserManagement() {
                 <div className="mb-3">
                   <label className="form-label">Chọn Nhân Viên (Hồ sơ)</label>
                   <div style={{ position: 'relative' }}>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={empSearchText} 
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={empSearchText}
                       onChange={e => {
-                         setEmpSearchText(e.target.value);
-                         setShowEmpDropdown(true);
-                         if(e.target.value === '') handleEmployeeSelect('');
+                        setEmpSearchText(e.target.value);
+                        setShowEmpDropdown(true);
+                        if (e.target.value === '') handleEmployeeSelect('');
                       }}
                       onFocus={() => setShowEmpDropdown(true)}
                       onBlur={() => setTimeout(() => setShowEmpDropdown(false), 200)}
                       placeholder="-- Tìm và Chọn Nhân Viên --"
                       style={{ paddingRight: 35 }}
                     />
-                    <span 
+                    <span
                       style={{ position: 'absolute', right: 12, top: 10, cursor: 'pointer', color: '#94a3b8', fontSize: 12 }}
                       onClick={() => setShowEmpDropdown(!showEmpDropdown)}
                     >
@@ -572,24 +674,24 @@ function UserManagement() {
                       <div style={{
                         position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
                         background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8,
-                        maxHeight: 240, overflowY: 'auto', zIndex: 1050, 
+                        maxHeight: 240, overflowY: 'auto', zIndex: 1050,
                         boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
                       }}>
-                         {filteredEmployees.map(emp => (
-                           <div 
-                             key={emp.EmployeeID}
-                             style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 14 }}
-                             onMouseDown={() => handleEmployeeSelect(emp.EmployeeID)}
-                             onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                             onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                           >
-                             <div style={{ fontWeight: 600, color: '#0f172a' }}>{emp.FullName}</div>
-                             <div style={{ fontSize: 12, color: '#64748b' }}>{emp.Position} ({emp.Department})</div>
-                           </div>
-                         ))}
-                         {filteredEmployees.length === 0 && (
-                           <div style={{ padding: '10px 14px', color: '#94a3b8', fontSize: 14, textAlign: 'center' }}>Không tìm thấy nhân viên</div>
-                         )}
+                        {filteredEmployees.map(emp => (
+                          <div
+                            key={emp.EmployeeID}
+                            style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 14 }}
+                            onMouseDown={() => handleEmployeeSelect(emp.EmployeeID)}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                          >
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{emp.FullName}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{emp.Position} ({emp.Department})</div>
+                          </div>
+                        ))}
+                        {filteredEmployees.length === 0 && (
+                          <div style={{ padding: '10px 14px', color: '#94a3b8', fontSize: 14, textAlign: 'center' }}>Không tìm thấy nhân viên</div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -602,7 +704,7 @@ function UserManagement() {
                     type="text"
                     className="form-control"
                     value={formData.Username}
-                    onChange={e => setFormData({...formData, Username: e.target.value})}
+                    onChange={e => setFormData({ ...formData, Username: e.target.value })}
                     disabled={editingUser ? true : false}
                     placeholder="Tên đăng nhập"
                   />
@@ -615,7 +717,7 @@ function UserManagement() {
                       type="password"
                       className="form-control"
                       value={formData.Password}
-                      onChange={e => setFormData({...formData, Password: e.target.value})}
+                      onChange={e => setFormData({ ...formData, Password: e.target.value })}
                       placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
                     />
                   </div>
@@ -625,7 +727,7 @@ function UserManagement() {
                   <select
                     className="form-control"
                     value={formData.Role}
-                    onChange={e => setFormData({...formData, Role: e.target.value})}
+                    onChange={e => setFormData({ ...formData, Role: e.target.value })}
                   >
                     <option value="Employee">Employee</option>
                     <option value="HR Manager">HR Manager</option>
@@ -637,12 +739,18 @@ function UserManagement() {
                   <label>
                     <input
                       type="checkbox"
-                      checked={formData.IsActive === 1}
-                      onChange={e => setFormData({...formData, IsActive: e.target.checked ? 1 : 0})}
+                      checked={!!formData.IsActive}
+                      onChange={e => setFormData({ ...formData, IsActive: e.target.checked ? 1 : 0 })}
                     />
-                    Hoạt động
+                    {' '}Hoạt động
                   </label>
                 </div>
+                {/* Inline error message */}
+                {modalError && (
+                  <div className="alert alert-danger py-2" style={{ fontSize: 13 }}>
+                    ⚠️ {modalError}
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Hủy</button>
@@ -653,53 +761,48 @@ function UserManagement() {
         </div>
       )}
 
-      {/* Modal Reset Password */}
-      {showResetModal && resetUser && (
-        <div className="modal" style={{display: 'block', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-          <div className="modal-dialog" style={{marginTop: '150px'}}>
-            <div className="modal-content" style={{borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}}>
-              <div className="modal-header" style={{borderBottom: '1px solid #e2e8f0'}}>
-                <h5 className="modal-title">🔑 Reset Mật Khẩu</h5>
+      {/* Modal Đặt Mật Khẩu Mới (Admin reset cho user) */}
+      {showResetModal && resetPasswordUser && (
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog" style={{ marginTop: '120px' }}>
+            <div className="modal-content" style={{ borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+              <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <h5 className="modal-title">🔑 Đặt Mật Khẩu Mới</h5>
                 <button type="button" className="btn-close" onClick={() => setShowResetModal(false)}></button>
               </div>
               <div className="modal-body">
-                <div className="alert alert-info mb-3" role="alert">
-                  <strong>User: {resetUser.Username}</strong><br/>
-                  Mật khẩu tạm đã được tạo và có thể được sử dụng ngay. User sẽ được yêu cầu thay đổi mật khẩu khi đăng nhập lần đầu tiên.
+                <div className="alert alert-info mb-3">
+                  Đặt mật khẩu mới cho tài khoản: <strong>{resetPasswordUser.Username}</strong>
                 </div>
-                
                 <div className="mb-3">
-                  <label className="form-label"><strong>Mật khẩu tạm:</strong></label>
-                  <div className="input-group">
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={tempPassword}
-                      readOnly
-                      style={{fontFamily: 'monospace', fontSize: '14px'}}
-                    />
-                    <button 
-                      className="btn btn-outline-secondary" 
-                      onClick={() => {
-                        navigator.clipboard.writeText(tempPassword);
-                        alert('Đã copy vào clipboard!');
-                      }}
-                      title="Copy"
-                    >
-                      📋 Copy
-                    </button>
+                  <label className="form-label"><strong>Mật khẩu mới</strong></label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Tối thiểu 6 ký tự"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label"><strong>Xác nhận mật khẩu</strong></label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới"
+                  />
+                </div>
+                {resetPasswordError && (
+                  <div className="alert alert-danger py-2" style={{ fontSize: 13 }}>
+                    ⚠️ {resetPasswordError}
                   </div>
-                </div>
-
-                <div className="alert alert-warning" role="alert">
-                  <strong>⚠️ Lưu ý quan trọng:</strong><br/>
-                  • Gửi mật khẩu này cho user qua kênh an toàn<br/>
-                  • User phải thay đổi mật khẩu tạm khi đăng nhập lần đầu<br/>
-                  • Mật khẩu tạm sẽ hết hạn sau khi user đổi mật khẩu mới
-                </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowResetModal(false)}>Đóng</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowResetModal(false)}>Hủy</button>
+                <button type="button" className="btn btn-primary" onClick={handleSaveNewPassword}>💾 Lưu mật khẩu</button>
               </div>
             </div>
           </div>
@@ -708,26 +811,26 @@ function UserManagement() {
 
       {/* Modal Phân Quyền */}
       {showPermissionModal && permissionUser && (
-        <div className="modal" style={{display: 'block', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-          <div className="modal-dialog" style={{marginTop: '150px'}}>
-            <div className="modal-content" style={{borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}}>
-              <div className="modal-header" style={{borderBottom: '1px solid #e2e8f0'}}>
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog" style={{ marginTop: '150px' }}>
+            <div className="modal-content" style={{ borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+              <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0' }}>
                 <h5 className="modal-title">🔐 Phân Quyền</h5>
                 <button type="button" className="btn-close" onClick={() => setShowPermissionModal(false)}></button>
               </div>
               <div className="modal-body">
                 <div className="mb-3">
-                  <strong>Tên tài khoản:</strong> {permissionUser.Username}<br/>
+                  <strong>Tên tài khoản:</strong> {permissionUser.Username}<br />
                   <strong>Họ tên:</strong> {permissionUser.FullName}
                 </div>
 
-                <hr/>
+                <hr />
 
                 <div className="mb-3">
                   <label className="form-label"><strong>Phân quyền mới:</strong></label>
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {['Admin', 'HR Manager', 'Payroll Manager', 'Employee'].map(role => (
-                      <div key={role} style={{position: 'relative'}}>
+                      <div key={role} style={{ position: 'relative' }}>
                         <input
                           type="radio"
                           id={`role-${role}`}
@@ -735,9 +838,9 @@ function UserManagement() {
                           value={role}
                           checked={newRole === role}
                           onChange={e => setNewRole(e.target.value)}
-                          style={{marginRight: '8px'}}
+                          style={{ marginRight: '8px' }}
                         />
-                        <label htmlFor={`role-${role}`} style={{cursor: 'pointer', marginBottom: 0}}>
+                        <label htmlFor={`role-${role}`} style={{ cursor: 'pointer', marginBottom: 0 }}>
                           {roleColors[role]?.icon} {role}
                         </label>
                       </div>
@@ -746,10 +849,10 @@ function UserManagement() {
                 </div>
 
                 <div className="alert alert-info" role="alert">
-                  <strong>Mô tả quyền hạn:</strong><br/>
-                  • <strong>Admin:</strong> Quản lý toàn hệ thống<br/>
-                  • <strong>HR Manager:</strong> Quản lý nhân sự<br/>
-                  • <strong>Payroll Manager:</strong> Quản lý bảng lương<br/>
+                  <strong>Mô tả quyền hạn:</strong><br />
+                  • <strong>Admin:</strong> Quản lý toàn hệ thống<br />
+                  • <strong>HR Manager:</strong> Quản lý nhân sự<br />
+                  • <strong>Payroll Manager:</strong> Quản lý bảng lương<br />
                   • <strong>Employee:</strong> Nhân viên thường
                 </div>
               </div>
@@ -764,10 +867,10 @@ function UserManagement() {
 
       {/* Modal Xem Mật Khẩu Tạm */}
       {showPasswordModal && viewPasswordUser && (
-        <div className="modal" style={{display: 'block', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-          <div className="modal-dialog" style={{marginTop: '150px'}}>
-            <div className="modal-content" style={{borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}}>
-              <div className="modal-header" style={{borderBottom: '1px solid #e2e8f0'}}>
+        <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog" style={{ marginTop: '150px' }}>
+            <div className="modal-content" style={{ borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+              <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0' }}>
                 <h5 className="modal-title">👁️ Xem Mật Khẩu Tạm</h5>
                 <button type="button" className="btn-close" onClick={() => setShowPasswordModal(false)}></button>
               </div>
@@ -779,7 +882,7 @@ function UserManagement() {
                 ) : (
                   <>
                     <div className="alert alert-info mb-3">
-                      <strong>User:</strong> {viewPasswordData.Username}<br/>
+                      <strong>User:</strong> {viewPasswordData.Username}<br />
                       <strong>Họ tên:</strong> {viewPasswordData.FullName}
                     </div>
                     <div className="mb-3">
@@ -790,7 +893,7 @@ function UserManagement() {
                           className="form-control"
                           value={viewPasswordData.TempPassword || '(Không có mật khẩu tạm)'}
                           readOnly
-                          style={{fontFamily: 'monospace', fontSize: '16px', letterSpacing: '2px'}}
+                          style={{ fontFamily: 'monospace', fontSize: '16px', letterSpacing: '2px' }}
                         />
                         {viewPasswordData.TempPassword && (
                           <button
@@ -806,10 +909,10 @@ function UserManagement() {
                       </div>
                     </div>
                     <div className="alert alert-warning">
-                      <strong>⚠️ Lưu ý bảo mật:</strong><br/>
-                      • Đây là mật khẩu tạm được tạo khi Reset Password<br/>
-                      • Chỉ Admin mới có thể xem mật khẩu này<br/>
-                      • Gửi cho user qua kênh liên lạc an toàn<br/>
+                      <strong>⚠️ Lưu ý bảo mật:</strong><br />
+                      • Đây là mật khẩu tạm được tạo khi Reset Password<br />
+                      • Chỉ Admin mới có thể xem mật khẩu này<br />
+                      • Gửi cho user qua kênh liên lạc an toàn<br />
                       • Khuyến nghị user đổi mật khẩu sau khi đăng nhập
                     </div>
                   </>

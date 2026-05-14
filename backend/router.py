@@ -507,55 +507,66 @@ def change_password(user_id):
 
 @router.route("/api/users/<int:user_id>/reset-password", methods=["POST"])
 def reset_password(user_id):
-    """Reset mật khẩu - tạo mật khẩu tạm ngẫu nhiên, lưu plaintext để admin xem"""
+    """Reset mật khẩu - Admin có thể đặt mật khẩu mới trực tiếp hoặc sinh tạm"""
     try:
+        req_json = request.get_json(silent=True) or {}
+        new_password_plain = req_json.get("NewPassword", "").strip()
+        requester = req_json.get("ResetBy", "admin")
+
         conn = get_taikhoan_connection()
         cur = conn.cursor()
-        
+
         # Lấy user
         cur.execute("SELECT Username, FullName FROM TaiKhoan WHERE UserID = ?", (user_id,))
         user = cur.fetchone()
         if not user:
+            cur.close(); conn.close()
             return jsonify({"status": "error", "msg": "User không tồn tại"}), 404
-        
+
         username, full_name = user[0], user[1]
-        
-        # Tạo mật khẩu tạm
-        temp_password = generate_temp_password(12)
-        temp_password_hash = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
-        
-        # Thử cập nhật cả TempPasswordPlain (cột có thể chưa tồn tại)
+
+        # Dùng mật khẩu Admin nhập vào, hoặc tự sinh nếu không có
+        if new_password_plain:
+            if len(new_password_plain) < 6:
+                cur.close(); conn.close()
+                return jsonify({"status": "error", "msg": "Mật khẩu mới phải ít nhất 6 ký tự"}), 400
+            password_to_set = new_password_plain
+        else:
+            password_to_set = generate_temp_password(12)
+
+        new_hash = bcrypt.hashpw(password_to_set.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
+
+        # Cập nhật PasswordHash (và TempPasswordPlain nếu cột tồn tại)
         try:
             cur.execute("""
                 UPDATE TaiKhoan
                 SET PasswordHash = ?, TempPasswordPlain = ?
                 WHERE UserID = ?
-            """, (temp_password_hash, temp_password, user_id))
+            """, (new_hash, password_to_set if not new_password_plain else None, user_id))
         except Exception:
-            # Nếu cột TempPasswordPlain chưa có, chỉ update PasswordHash
             cur.execute("""
                 UPDATE TaiKhoan
                 SET PasswordHash = ?
                 WHERE UserID = ?
-            """, (temp_password_hash, user_id))
-        
+            """, (new_hash, user_id))
+
         conn.commit()
         cur.close()
         conn.close()
-        
+
         source_ip = request.remote_addr
-        req_json = request.get_json(silent=True)
-        requester = req_json.get("ResetBy", "admin") if req_json else "admin"
         log_action(requester, "RESET_PASSWORD", f"/api/users/{user_id}/reset-password", "Success", source_ip)
-        
+
         return jsonify({
             "status": "success",
-            "msg": f"Reset mật khẩu thành công cho {full_name}",
-            "tempPassword": temp_password,
-            "note": "Mật khẩu tạm đã được lưu. Admin có thể xem lại trong phần Quản lý User."
+            "msg": f"Đặt mật khẩu mới thành công cho {full_name}",
+            "tempPassword": password_to_set if not new_password_plain else None
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+
 
 @router.route("/api/users/<int:user_id>/show-password", methods=["GET"])
 def show_user_password(user_id):
