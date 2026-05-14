@@ -9,6 +9,50 @@ from functools import wraps
 
 router = Blueprint("router", __name__)
 
+# ===== BRUTE-FORCE PROTECTION =====
+# { username: {"count": int, "locked_until": datetime or None} }
+_failed_attempts = {}
+LOCKOUT_MAX_ATTEMPTS = 5
+LOCKOUT_DURATION_MINUTES = 15
+
+def _record_failed_attempt(username):
+    """Record a failed login attempt; return (is_now_locked, seconds_remaining).
+
+    Lock behaviour:
+      - Attempts 1-5  → counter increments, returns (False, 0)  → caller returns 401
+      - Attempt 5 sets locked_until so the NEXT (6th) request hits _is_locked_out → 429
+    """
+    now = datetime.utcnow()
+    entry = _failed_attempts.setdefault(username, {"count": 0, "locked_until": None})
+    entry["count"] += 1
+    if entry["count"] >= LOCKOUT_MAX_ATTEMPTS:
+        # Lock starts NOW; the 6th request will be caught by _is_locked_out()
+        entry["locked_until"] = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        entry["count"] = 0  # reset counter so next window is clean
+        # Return False here: this (the 5th) attempt still gets a 401
+        # The *next* attempt will be blocked by _is_locked_out() → 429
+        return False, 0
+    return False, 0
+
+def _is_locked_out(username):
+    """Return (locked: bool, seconds_remaining: int)."""
+    entry = _failed_attempts.get(username)
+    if not entry or not entry.get("locked_until"):
+        return False, 0
+    now = datetime.utcnow()
+    if now < entry["locked_until"]:
+        remaining = int((entry["locked_until"] - now).total_seconds())
+        return True, remaining
+    # Lock expired — clear it
+    entry["locked_until"] = None
+    entry["count"] = 0
+    return False, 0
+
+def _clear_failed_attempts(username):
+    """Clear failed attempts after a successful login."""
+    if username in _failed_attempts:
+        _failed_attempts[username] = {"count": 0, "locked_until": None}
+
 # ===== HELPER: Tạo mật khẩu tạm =====
 def generate_temp_password(length=12):
     """Tạo mật khẩu tạm gồm 12 ký tự: chữ hoa, chữ thường, số, ký tự đặc biệt"""
@@ -53,23 +97,32 @@ def login():
     data = request.get_json()
     username = data.get("Username", "").strip()
     password = data.get("Password", "").strip()
-    
+    source_ip = request.remote_addr
+
     if not username or not password:
         return jsonify({"status": "error", "msg": "Username và Password không được trống"}), 400
-    
+
     # ===== INPUT VALIDATION: Ngăn SQL Injection =====
     # Loại bỏ các ký tự đặc biệt nguy hiểm: -- ; ' " /* */
     dangerous_chars = ['--', ';', "'", '"', '/*', '*/']
     for char in dangerous_chars:
         if char in username or char in password:
-            source_ip = request.remote_addr
             log_action(username, "LOGIN_INJECTION_ATTEMPT", "/api/auth/login", "Failure", source_ip)
-            return jsonify({"status": "error", "msg": "Username hoặc Password chứa ký tự không hợp lệ"}), 400
-    
+            return jsonify({"status": "error", "msg": "Username hoặc Password chứa ký tự không hợp lệ"}), 401
+
+    # ===== BRUTE-FORCE CHECK =====
+    locked, remaining = _is_locked_out(username)
+    if locked:
+        log_action(username, "LOGIN_BRUTE_FORCE_BLOCKED", "/api/auth/login", "Failure", source_ip)
+        return jsonify({
+            "status": "error",
+            "msg": f"Tài khoản bị tạm khóa do đăng nhập sai nhiều lần. Thử lại sau {remaining} giây."
+        }), 429
+
     try:
         conn = get_taikhoan_connection()
         cur = conn.cursor()
-        
+
         # Tìm user theo Username (parameterized query - safe)
         cur.execute("""
             SELECT UserID, Username, PasswordHash, FullName, Role, IsActive, EmployeeID
@@ -77,37 +130,46 @@ def login():
             WHERE Username = ?
         """, (username,))
         user = cur.fetchone()
-        
+
         if not user:
-            source_ip = request.remote_addr
+            _record_failed_attempt(username)
             log_action(username, "LOGIN_FAILED", "/api/auth/login", "Failure", source_ip)
+            cur.close()
+            conn.close()
             return jsonify({"status": "error", "msg": "Tài khoản không tồn tại"}), 401
-        
-        user_id, db_username, password_hash, full_name, role, is_active, employee_id = user[0], user[1], user[2], user[3], user[4], user[5], user[6]
-        
+
+        user_id, db_username, password_hash, full_name, role, is_active, employee_id = (
+            user[0], user[1], user[2], user[3], user[4], user[5], user[6]
+        )
+
         # Kiểm tra tài khoản còn hoạt động
         if not is_active:
-            source_ip = request.remote_addr
-            log_action(username, "LOGIN_BLOCKED", "/api/auth/login", "Failure", source_ip)
-            return jsonify({"status": "error", "msg": "Tài khoản đã bị khóa"}), 403
-        
+            log_action(username, "LOGIN_BLOCKED", "/api/auth/login", "Forbidden", source_ip)
+            cur.close()
+            conn.close()
+            return jsonify({"status": "error", "msg": "Tài khoản đã bị vô hiệu hóa"}), 403
+
         # Kiểm tra password (bcrypt.checkpw() đã an toàn, không bị SQL injection)
         if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
-            source_ip = request.remote_addr
+            _record_failed_attempt(username)
             log_action(username, "LOGIN_FAILED", "/api/auth/login", "Failure", source_ip)
+            cur.close()
+            conn.close()
             return jsonify({"status": "error", "msg": "Mật khẩu không chính xác"}), 401
-        
+
+        # Đăng nhập thành công — xóa failed attempts
+        _clear_failed_attempts(username)
+
         # Tạo JWT token
         from app import app
         token = create_token(user_id, db_username, role, app.config['SECRET_KEY'], employee_id)
-        
+
         # Ghi log thành công
-        source_ip = request.remote_addr
         log_action(username, "LOGIN", "/api/auth/login", "Success", source_ip)
-        
+
         cur.close()
         conn.close()
-        
+
         return jsonify({
             "status": "success",
             "msg": "Đăng nhập thành công",
@@ -120,7 +182,7 @@ def login():
                 "EmployeeID": employee_id
             }
         }), 200
-        
+
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
 
@@ -445,55 +507,66 @@ def change_password(user_id):
 
 @router.route("/api/users/<int:user_id>/reset-password", methods=["POST"])
 def reset_password(user_id):
-    """Reset mật khẩu - tạo mật khẩu tạm ngẫu nhiên, lưu plaintext để admin xem"""
+    """Reset mật khẩu - Admin có thể đặt mật khẩu mới trực tiếp hoặc sinh tạm"""
     try:
+        req_json = request.get_json(silent=True) or {}
+        new_password_plain = req_json.get("NewPassword", "").strip()
+        requester = req_json.get("ResetBy", "admin")
+
         conn = get_taikhoan_connection()
         cur = conn.cursor()
-        
+
         # Lấy user
         cur.execute("SELECT Username, FullName FROM TaiKhoan WHERE UserID = ?", (user_id,))
         user = cur.fetchone()
         if not user:
+            cur.close(); conn.close()
             return jsonify({"status": "error", "msg": "User không tồn tại"}), 404
-        
+
         username, full_name = user[0], user[1]
-        
-        # Tạo mật khẩu tạm
-        temp_password = generate_temp_password(12)
-        temp_password_hash = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
-        
-        # Thử cập nhật cả TempPasswordPlain (cột có thể chưa tồn tại)
+
+        # Dùng mật khẩu Admin nhập vào, hoặc tự sinh nếu không có
+        if new_password_plain:
+            if len(new_password_plain) < 6:
+                cur.close(); conn.close()
+                return jsonify({"status": "error", "msg": "Mật khẩu mới phải ít nhất 6 ký tự"}), 400
+            password_to_set = new_password_plain
+        else:
+            password_to_set = generate_temp_password(12)
+
+        new_hash = bcrypt.hashpw(password_to_set.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
+
+        # Cập nhật PasswordHash (và TempPasswordPlain nếu cột tồn tại)
         try:
             cur.execute("""
                 UPDATE TaiKhoan
                 SET PasswordHash = ?, TempPasswordPlain = ?
                 WHERE UserID = ?
-            """, (temp_password_hash, temp_password, user_id))
+            """, (new_hash, password_to_set if not new_password_plain else None, user_id))
         except Exception:
-            # Nếu cột TempPasswordPlain chưa có, chỉ update PasswordHash
             cur.execute("""
                 UPDATE TaiKhoan
                 SET PasswordHash = ?
                 WHERE UserID = ?
-            """, (temp_password_hash, user_id))
-        
+            """, (new_hash, user_id))
+
         conn.commit()
         cur.close()
         conn.close()
-        
+
         source_ip = request.remote_addr
-        req_json = request.get_json(silent=True)
-        requester = req_json.get("ResetBy", "admin") if req_json else "admin"
         log_action(requester, "RESET_PASSWORD", f"/api/users/{user_id}/reset-password", "Success", source_ip)
-        
+
         return jsonify({
             "status": "success",
-            "msg": f"Reset mật khẩu thành công cho {full_name}",
-            "tempPassword": temp_password,
-            "note": "Mật khẩu tạm đã được lưu. Admin có thể xem lại trong phần Quản lý User."
+            "msg": f"Đặt mật khẩu mới thành công cho {full_name}",
+            "tempPassword": password_to_set if not new_password_plain else None
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+
 
 @router.route("/api/users/<int:user_id>/show-password", methods=["GET"])
 def show_user_password(user_id):
@@ -615,33 +688,43 @@ def filter_logs():
 #Cac API sau
 @router.route("/api/departments")
 def get_departments():
-    sql = get_sqlserver_connection()
-    cur = sql.cursor() # dùng để thực thi câu lệnh sql
-    cur.execute("""
-        SELECT DepartmentID, DepartmentName
-        From Departments
-        ORDER BY DepartmentName
-    """)
-    rows = [
-        {"DepartmentID": r[0], "DepartmentName": r[1]}
-        for r in cur.fetchall() #trả toàn bộ kết quả từ DB
-    ]
-    return jsonify(rows)
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor() # dùng để thực thi câu lệnh sql
+        cur.execute("""
+            SELECT DepartmentID, DepartmentName
+            From Departments
+            ORDER BY DepartmentName
+        """)
+        rows = [
+            {"DepartmentID": r[0], "DepartmentName": r[1]}
+            for r in cur.fetchall() #trả toàn bộ kết quả từ DB
+        ]
+        cur.close()
+        sql.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @router.route("/api/positions")
 def get_positions():
-    sql = get_sqlserver_connection()
-    cur = sql.cursor()
-    cur.execute("""
-        SELECT PositionID, PositionName
-        FROM Positions
-        ORDER BY PositionName
-    """)
-    rows = [
-        {"PositionID": r[0], "PositionName": r[1]}
-        for r in cur.fetchall()
-    ]
-    return jsonify(rows)
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor()
+        cur.execute("""
+            SELECT PositionID, PositionName
+            FROM Positions
+            ORDER BY PositionName
+        """)
+        rows = [
+            {"PositionID": r[0], "PositionName": r[1]}
+            for r in cur.fetchall()
+        ]
+        cur.close()
+        sql.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 # ===== CRUD Departments =====
 
@@ -748,7 +831,7 @@ def get_employees():
     sql = get_sqlserver_connection()
     cur = sql.cursor()
     cur.execute("""
-        SELECT DISTINCT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName
+        SELECT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName, e.Status
         FROM Employees e
         LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
         LEFT JOIN Positions p ON e.PositionID = p.PositionID
@@ -760,40 +843,48 @@ def get_employees():
             "EmployeeID": r[0],
             "FullName": r[1],
             "Department": r[2],
-            "Position": r[3]
+            "Position": r[3],
+            "Status": r[4]
         })
+    cur.close()
+    sql.close()
     return jsonify(rows)
 
 @router.route("/api/employees/<int:emp_id>")
 def get_employee_detail(emp_id):
-    sql = get_sqlserver_connection()
-    cur = sql.cursor()
-    cur.execute("""
-        SELECT e.EmployeeID, e.FullName, e.Email, e.DateOfBirth, 
-            e.Gender, e.PhoneNumber, e.HireDate, e.Status,
-            d.DepartmentID, d.DepartmentName, p.PositionID, p.PositionName
-        FROM Employees e
-        LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
-        LEFT JOIN Positions p ON e.PositionID = p.PositionID
-        WHERE EmployeeID = ?
-    """, (emp_id,))
-    r = cur.fetchone() #lấy 1 dòng duy nhất
-    if not r:
-        return jsonify({"msg": "Employee not found"}), 404
-    return jsonify({
-        "EmployeeID": r[0],
-        "FullName": r[1],
-        "Email": r[2],
-        "DateOfBirth": r[3],
-        "Gender": r[4],
-        "PhoneNumber": r[5],
-        "HireDate": r[6],
-        "Status": r[7], 
-        "DepartmentID": r[8],
-        "DepartmentName": r[9], 
-        "PositionID": r[10], 
-        "PositionName": r[11]
-    })
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor()
+        cur.execute("""
+            SELECT e.EmployeeID, e.FullName, e.Email, e.DateOfBirth, 
+                e.Gender, e.PhoneNumber, e.HireDate, e.Status,
+                d.DepartmentID, d.DepartmentName, p.PositionID, p.PositionName
+            FROM Employees e
+            LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
+            LEFT JOIN Positions p ON e.PositionID = p.PositionID
+            WHERE EmployeeID = ?
+        """, (emp_id,))
+        r = cur.fetchone() #lấy 1 dòng duy nhất
+        cur.close()
+        sql.close()
+        if not r:
+            return jsonify({"msg": "Employee not found"}), 404
+        return jsonify({
+            "EmployeeID": r[0],
+            "FullName": r[1],
+            "Email": r[2],
+            "DateOfBirth": r[3],
+            "Gender": r[4],
+            "PhoneNumber": r[5],
+            "HireDate": r[6],
+            "Status": r[7], 
+            "DepartmentID": r[8],
+            "DepartmentName": r[9], 
+            "PositionID": r[10], 
+            "PositionName": r[11]
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @router.route("/api/employees", methods=["POST"])
 def add_employee():

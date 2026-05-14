@@ -85,6 +85,9 @@ function DepartmentMngt() {
     String(d.DepartmentID).includes(search)
   );
 
+  const sortedDepartments = [...filtered].sort((a, b) =>
+    Number(a.DepartmentID) - Number(b.DepartmentID)
+  );
   const deptColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 
   return (
@@ -175,7 +178,7 @@ function DepartmentMngt() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="4" className="text-center py-4 text-muted">Chưa có dữ liệu</td></tr>
               ) : (
-                filtered.map((d, i) => (
+                sortedDepartments.map((d, i) => (
                   <tr key={d.DepartmentID}>
                     <td><strong>#{d.DepartmentID}</strong></td>
                     <td>
