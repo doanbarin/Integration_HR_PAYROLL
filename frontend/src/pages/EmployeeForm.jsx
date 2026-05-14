@@ -106,6 +106,7 @@ function EmployeeForm() {
                 <select className="form-select" name="Gender" value={form.Gender} onChange={handleChange}>
                   <option value="Male">Nam</option>
                   <option value="Female">Nữ</option>
+                  <option value="Other">Khác</option> 
                 </select>
               </div>
               <div className="col-md-4">

@@ -41,15 +41,28 @@ function EmployeeList() {
   };
 
   const filtered = employees.filter(e => {
+    const searchValue = search.trim().toLowerCase();
+    const fullName = (e.FullName || '').toLowerCase();
+    const department = (e.Department || '').toLowerCase();
+    const position = (e.Position || '').toLowerCase();
+    const employeeID = String(e.EmployeeID);
+    // Tìm kiếm theo tên, phòng ban, chức vụ hoặc mã nhân viên
     const matchSearch =
-      (e.FullName || '').toLowerCase().includes(search.toLowerCase()) ||
-      (e.Department || '').toLowerCase().includes(search.toLowerCase()) ||
-      (e.Position || '').toLowerCase().includes(search.toLowerCase()) ||
-      String(e.EmployeeID).includes(search);
+      fullName.includes(searchValue) || 
+      department.includes(searchValue) ||
+      position.includes(searchValue) ||
+      employeeID.includes(searchValue) ||
+      (/^[a-z][^a-z]*$/i.test(searchValue) && // nếu searchValue là một từ đơn (không chứa chữ cái nào khác), so sánh với tên đầu tiên
+        fullName.split(' ')[0].startsWith(searchValue[0]));
+      // Lọc theo phòng ban và trạng thái
     const matchDept = !filterDept || e.Department === filterDept;
     const matchStatus = !filterStatus || e.Status === filterStatus;
     return matchSearch && matchDept && matchStatus;
   });
+
+  const sortedEmployees = [...filtered].sort((a, b) =>
+    Number(a.EmployeeID) - Number(b.EmployeeID)
+  );// Sắp xếp theo EmployeeID tăng dần
 
   const statusStyle = (status) => ({
     background: status === 'Active' ? '#f0fdf4' : '#fef2f2',
@@ -110,7 +123,7 @@ function EmployeeList() {
                   <td colSpan="6" className="text-center py-4 text-muted">Không tìm thấy nhân viên nào</td>
                 </tr>
               ) : (
-                filtered.map(emp => (
+                sortedEmployees.map(emp => (// Sử dụng sortedEmployees để hiển thị danh sách đã được sắp xếp
                   <tr key={emp.EmployeeID}>
                     <td><strong>#{emp.EmployeeID}</strong></td>
                     <td>

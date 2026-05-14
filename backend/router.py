@@ -688,33 +688,43 @@ def filter_logs():
 #Cac API sau
 @router.route("/api/departments")
 def get_departments():
-    sql = get_sqlserver_connection()
-    cur = sql.cursor() # dùng để thực thi câu lệnh sql
-    cur.execute("""
-        SELECT DepartmentID, DepartmentName
-        From Departments
-        ORDER BY DepartmentName
-    """)
-    rows = [
-        {"DepartmentID": r[0], "DepartmentName": r[1]}
-        for r in cur.fetchall() #trả toàn bộ kết quả từ DB
-    ]
-    return jsonify(rows)
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor() # dùng để thực thi câu lệnh sql
+        cur.execute("""
+            SELECT DepartmentID, DepartmentName
+            From Departments
+            ORDER BY DepartmentName
+        """)
+        rows = [
+            {"DepartmentID": r[0], "DepartmentName": r[1]}
+            for r in cur.fetchall() #trả toàn bộ kết quả từ DB
+        ]
+        cur.close()
+        sql.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @router.route("/api/positions")
 def get_positions():
-    sql = get_sqlserver_connection()
-    cur = sql.cursor()
-    cur.execute("""
-        SELECT PositionID, PositionName
-        FROM Positions
-        ORDER BY PositionName
-    """)
-    rows = [
-        {"PositionID": r[0], "PositionName": r[1]}
-        for r in cur.fetchall()
-    ]
-    return jsonify(rows)
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor()
+        cur.execute("""
+            SELECT PositionID, PositionName
+            FROM Positions
+            ORDER BY PositionName
+        """)
+        rows = [
+            {"PositionID": r[0], "PositionName": r[1]}
+            for r in cur.fetchall()
+        ]
+        cur.close()
+        sql.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 # ===== CRUD Departments =====
 
@@ -821,7 +831,7 @@ def get_employees():
     sql = get_sqlserver_connection()
     cur = sql.cursor()
     cur.execute("""
-        SELECT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName
+        SELECT e.EmployeeID, e.FullName, d.DepartmentName, p.PositionName, e.Status
         FROM Employees e
         LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
         LEFT JOIN Positions p ON e.PositionID = p.PositionID
@@ -833,40 +843,48 @@ def get_employees():
             "EmployeeID": r[0],
             "FullName": r[1],
             "Department": r[2],
-            "Position": r[3]
+            "Position": r[3],
+            "Status": r[4]
         })
+    cur.close()
+    sql.close()
     return jsonify(rows)
 
 @router.route("/api/employees/<int:emp_id>")
 def get_employee_detail(emp_id):
-    sql = get_sqlserver_connection()
-    cur = sql.cursor()
-    cur.execute("""
-        SELECT e.EmployeeID, e.FullName, e.Email, e.DateOfBirth, 
-            e.Gender, e.PhoneNumber, e.HireDate, e.Status,
-            d.DepartmentID, d.DepartmentName, p.PositionID, p.PositionName
-        FROM Employees e
-        LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
-        LEFT JOIN Positions p ON e.PositionID = p.PositionID
-        WHERE EmployeeID = ?
-    """, (emp_id,))
-    r = cur.fetchone() #lấy 1 dòng duy nhất
-    if not r:
-        return jsonify({"msg": "Employee not found"}), 404
-    return jsonify({
-        "EmployeeID": r[0],
-        "FullName": r[1],
-        "Email": r[2],
-        "DateOfBirth": r[3],
-        "Gender": r[4],
-        "PhoneNumber": r[5],
-        "HireDate": r[6],
-        "Status": r[7], 
-        "DepartmentID": r[8],
-        "DepartmentName": r[9], 
-        "PositionID": r[10], 
-        "PositionName": r[11]
-    })
+    try:
+        sql = get_sqlserver_connection()
+        cur = sql.cursor()
+        cur.execute("""
+            SELECT e.EmployeeID, e.FullName, e.Email, e.DateOfBirth, 
+                e.Gender, e.PhoneNumber, e.HireDate, e.Status,
+                d.DepartmentID, d.DepartmentName, p.PositionID, p.PositionName
+            FROM Employees e
+            LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
+            LEFT JOIN Positions p ON e.PositionID = p.PositionID
+            WHERE EmployeeID = ?
+        """, (emp_id,))
+        r = cur.fetchone() #lấy 1 dòng duy nhất
+        cur.close()
+        sql.close()
+        if not r:
+            return jsonify({"msg": "Employee not found"}), 404
+        return jsonify({
+            "EmployeeID": r[0],
+            "FullName": r[1],
+            "Email": r[2],
+            "DateOfBirth": r[3],
+            "Gender": r[4],
+            "PhoneNumber": r[5],
+            "HireDate": r[6],
+            "Status": r[7], 
+            "DepartmentID": r[8],
+            "DepartmentName": r[9], 
+            "PositionID": r[10], 
+            "PositionName": r[11]
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 @router.route("/api/employees", methods=["POST"])
 def add_employee():
