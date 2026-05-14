@@ -77,6 +77,9 @@ function PositionMngt() {
     String(p.PositionID).includes(search)
   );
 
+  const sortedPositions = [...filtered].sort((a, b) =>
+    Number(a.PositionID) - Number(b.PositionID)
+  );
   const posColors = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
   return (
@@ -137,7 +140,7 @@ function PositionMngt() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="3" className="text-center py-4 text-muted">Chưa có dữ liệu</td></tr>
               ) : (
-                filtered.map((p, i) => (
+                sortedPositions.map((p, i) => (
                   <tr key={p.PositionID}>
                     <td><strong>#{p.PositionID}</strong></td>
                     <td>
