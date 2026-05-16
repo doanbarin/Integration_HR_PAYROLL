@@ -286,7 +286,7 @@ function DashboardHome() {
 
       {/* Recent Employees */}
       <div className="row g-3">
-        <div className="col-lg-8">
+        <div className="col-12">
           <div className="content-card">
             <div className="card-header-custom">
               <h5>📋 Nhân Viên Mới Nhất</h5>
@@ -313,21 +313,6 @@ function DashboardHome() {
                   )}
                 </tbody>
               </table>
-            </div>
-          </div>
-        </div>
-
-        <div className="col-lg-4">
-          <div className="content-card">
-            <div className="card-header-custom">
-              <h5>🔔 Cảnh Báo Hệ Thống</h5>
-            </div>
-            <div className="p-3">
-              {stats.alertCount === 0 ? (
-                <p className="text-center text-muted py-3">Chưa có cảnh báo</p>
-              ) : (
-                <p className="text-center text-muted py-3">Có {stats.alertCount} cảnh báo</p>
-              )}
             </div>
           </div>
         </div>
