@@ -68,10 +68,10 @@ function ReportCenter() {
   }, []);
 
   const reports = [
-    { key: 'hr', icon: '👥', title: 'Báo Cáo Nhân Sự', desc: 'Số lượng NV, theo phòng ban, trạng thái', role: 'HR Manager' },
-    { key: 'payroll', icon: '💰', title: 'Báo Cáo Lương', desc: 'Tổng lương, lương trung bình, theo PB', role: 'Payroll Manager' },
-    { key: 'attendance', icon: '📅', title: 'Báo Cáo Chấm Công', desc: 'Tỷ lệ nghỉ, top nghỉ nhiều', role: 'Admin' },
-    { key: 'dividend', icon: '📊', title: 'Báo Cáo Cổ Tức', desc: 'Tổng cổ tức, theo nhân viên', role: 'Admin' },
+    { key: 'hr', icon: '👥', title: 'Báo Cáo Nhân Sự', desc: 'Số lượng NV theo phòng ban/trạng thái', role: 'HR Manager' },
+    { key: 'payroll', icon: '💰', title: 'Báo Cáo Lương', desc: 'Tổng lương, lương trung bình', role: 'Payroll Manager' },
+    { key: 'attendance', icon: '📅', title: 'Báo Cáo Chấm Công', desc: 'Top nghỉ nhiều', role: 'Admin' },
+    { key: 'dividend', icon: '📊', title: 'Báo Cáo Cổ Tức', desc: 'Tổng cổ tức theo nhân viên', role: 'Admin' },
   ];
 
   // HR report data
@@ -113,7 +113,7 @@ function ReportCenter() {
   // Dividend report data
   const totalDividend = dividends.reduce((s, d) => s + (d.DividendAmount || 0), 0);
   const avgDividend = dividends.length > 0 ? Math.round(totalDividend / dividends.length) : 0;
-  
+
   const divByDept = {};
   dividends.forEach(d => {
     const deptName = d.DepartmentName || 'Khác';
@@ -126,29 +126,28 @@ function ReportCenter() {
   const getReportData = () => {
     const today = new Date().toLocaleDateString('vi-VN');
     if (activeReport === 'hr') {
-      const headers = ['Ma NV', 'Ho Ten', 'Phong Ban', 'Chuc Vu', 'Trang Thai'];
+      const headers = ['Mã NV', 'Họ Tên', 'Phòng Ban', 'Chức Vụ', 'Trạng Thái'];
       const rows = employees.map(e => [
         e.EmployeeID,
         e.FullName || '',
-        e.Department || 'Chua phan bo',
+        e.Department || 'Chưa phân bổ',
         e.Position || '',
         e.Status || 'Active'
       ]);
-      // Summary rows
       const summary = [
         [],
-        ['TONG KET'],
-        ['Tong nhan vien', employees.length],
-        ['Dang lam viec', activeCount],
-        ['Nghi viec', inactiveCount],
+        ['TỔNG KẾT'],
+        ['Tổng nhân viên', employees.length],
+        ['Đang làm việc', activeCount],
+        ['Nghỉ việc', inactiveCount],
         [],
-        ['NHAN VIEN THEO PHONG BAN'],
+        ['NHÂN VIÊN THEO PHÒNG BAN'],
         ...Object.entries(empByDept).map(([dept, count]) => [dept, count])
       ];
-      return { headers, rows, summary, title: 'Bao Cao Nhan Su', date: today };
+      return { headers, rows, summary, title: 'Báo Cáo Nhân Sự', date: today };
     }
     if (activeReport === 'payroll') {
-      const headers = ['Ma NV', 'Ho Ten', 'Phong Ban', 'Thang', 'Luong Co Ban', 'Phu Cap', 'Khau Tru', 'Thuc Lanh'];
+      const headers = ['Mã NV', 'Họ Tên', 'Phòng Ban', 'Tháng', 'Lương Cơ Bản', 'Phụ Cấp', 'Khấu Trừ', 'Thực Lĩnh'];
       const rows = salaries.map(s => [
         s.EmployeeID,
         s.FullName || '',
@@ -161,18 +160,18 @@ function ReportCenter() {
       ]);
       const summary = [
         [],
-        ['TONG KET'],
-        ['Tong chi luong', totalSalary],
-        ['Luong trung binh', avgSalary],
-        ['So phieu luong', salaries.length],
+        ['TỔNG KẾT'],
+        ['Tổng chi lương', totalSalary],
+        ['Lương trung bình', avgSalary],
+        ['Số phiếu lương', salaries.length],
         [],
-        ['LUONG THEO PHONG BAN'],
+        ['LƯƠNG THEO PHÒNG BAN'],
         ...Object.entries(salaryByDept).map(([dept, total]) => [dept, total])
       ];
-      return { headers, rows, summary, title: 'Bao Cao Luong', date: today };
+      return { headers, rows, summary, title: 'Báo Cáo Lương', date: today };
     }
     if (activeReport === 'attendance') {
-      const headers = ['Ma NV', 'Ho Ten', 'Thang', 'Ngay Cong', 'Ngay Vang', 'Ngay Nghi'];
+      const headers = ['Mã NV', 'Họ Tên', 'Tháng', 'Ngày Công', 'Ngày Vắng', 'Ngày Nghỉ'];
       const rows = attendance.map(a => [
         a.EmployeeID,
         a.FullName || '',
@@ -183,20 +182,20 @@ function ReportCenter() {
       ]);
       const summary = [
         [],
-        ['TONG KET'],
-        ['Tong ngay cong', totalWorkDays],
-        ['Tong ngay vang', totalAbsent],
-        ['Tong ngay nghi', totalLeave],
-        ['Ty le nghi', leaveRate + '%'],
+        ['TỔNG KẾT'],
+        ['Tổng ngày công', totalWorkDays],
+        ['Tổng ngày vắng', totalAbsent],
+        ['Tổng ngày nghỉ', totalLeave],
+        ['Tỷ lệ nghỉ', leaveRate + '%'],
         [],
-        ['TOP NHAN VIEN NGHI NHIEU'],
-        ['Ma NV', 'Ho Ten', 'Tong Ngay Nghi/Vang'],
+        ['TOP NHÂN VIÊN NGHI NHIỀU'],
+        ['Mã NV', 'Họ Tên', 'Tổng Ngày Nghỉ/Vắng'],
         ...topAbsent.map(e => [e.id, e.name, e.total])
       ];
-      return { headers, rows, summary, title: 'Bao Cao Cham Cong', date: today };
+      return { headers, rows, summary, title: 'Báo Cáo Chấm Công', date: today };
     }
     if (activeReport === 'dividend') {
-      const headers = ['Ma NV', 'Ho Ten', 'Phong Ban', 'Ngay Nhan', 'So Tien (VND)'];
+      const headers = ['Mã NV', 'Họ Tên', 'Phòng Ban', 'Ngày Nhận', 'Số Tiền (VND)'];
       const rows = dividends.map(d => [
         d.EmployeeID,
         d.FullName || '',
@@ -206,30 +205,40 @@ function ReportCenter() {
       ]);
       const summary = [
         [],
-        ['TONG KET'],
-        ['Tong tien co tuc', totalDividend],
-        ['Trung binh', avgDividend],
-        ['So luot nhan', dividends.length],
+        ['TỔNG KẾT'],
+        ['Tổng tiền cổ tức', totalDividend],
+        ['Trung bình', avgDividend],
+        ['Số lượt nhận', dividends.length],
         [],
-        ['CO TUC THEO PHONG BAN'],
+        ['CỔ TỨC THEO PHÒNG BAN'],
         ...Object.entries(divByDept).map(([dept, total]) => [dept, total])
       ];
-      return { headers, rows, summary, title: 'Bao Cao Co Tuc', date: today };
+      return { headers, rows, summary, title: 'Báo Cáo Cổ Tức', date: today };
     }
     return null;
+  };
+
+  // Strip Vietnamese diacritics so jsPDF default font renders correctly
+  const sanitizeForPDF = (val) => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'number') return val;
+    return String(val)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove combining diacritics
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D'); // handle đ/Đ (not covered by NFD)
   };
 
   const handleExportExcel = () => {
     const data = getReportData();
     if (!data) {
-      alert('Bao cao nay chua co du lieu de xuat.');
+      alert('Báo cáo này chưa có dữ liệu để xuất.');
       return;
     }
     const { headers, rows, summary, title } = data;
 
     const wsData = [
       [title.toUpperCase()],
-      ['Ngay xuat: ' + data.date],
+      ['Ngày xuất: ' + data.date],
       [],
       headers,
       ...rows,
@@ -246,29 +255,56 @@ function ReportCenter() {
     XLSX.writeFile(wb, `${title.replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const data = getReportData();
     if (!data) {
       alert('Bao cao nay chua co du lieu de xuat.');
       return;
     }
     const { headers, rows, title } = data;
-
     const doc = new jsPDF({ orientation: headers.length > 6 ? 'landscape' : 'portrait' });
 
+    // Try to load Roboto font (supports Vietnamese) from CDN
+    let fontName = 'helvetica';
+    let tableRows = rows.map(row => row.map(cell => sanitizeForPDF(cell)));
+    try {
+      const ttfRes = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf');
+      const ttfBoldRes = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf');
+      if (ttfRes.ok && ttfBoldRes.ok) {
+        const toBase64 = async (res) => {
+          const buf = await res.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = '';
+          bytes.forEach(b => { binary += String.fromCharCode(b); });
+          return btoa(binary);
+        };
+        const [regB64, boldB64] = await Promise.all([toBase64(ttfRes), toBase64(ttfBoldRes)]);
+        doc.addFileToVFS('Roboto-Regular.ttf', regB64);
+        doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+        doc.addFileToVFS('Roboto-Bold.ttf', boldB64);
+        doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold');
+        doc.setFont('Roboto', 'normal');
+        fontName = 'Roboto';
+        tableRows = rows; // use original Vietnamese text
+      }
+    } catch (_) {
+      // CDN unavailable → fall back to sanitized ASCII
+    }
+
     // Title
+    doc.setFont(fontName, 'bold');
     doc.setFontSize(16);
     doc.text(title.toUpperCase(), 14, 20);
-
+    doc.setFont(fontName, 'normal');
     doc.setFontSize(10);
-    doc.text('Ngay xuat: ' + data.date, 14, 28);
+    doc.text('Ngày xuất: ' + data.date, 14, 28);
 
     // Main table
     autoTable(doc, {
       head: [headers],
-      body: rows,
+      body: tableRows,
       startY: 35,
-      styles: { fontSize: 9, cellPadding: 3 },
+      styles: { fontSize: 9, cellPadding: 3, font: fontName },
       headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       margin: { left: 14, right: 14 },
@@ -278,33 +314,48 @@ function ReportCenter() {
     const tableEndY = (doc.lastAutoTable && doc.lastAutoTable.finalY)
       ? doc.lastAutoTable.finalY + 10
       : 50;
+    doc.setFont(fontName, 'bold');
     doc.setFontSize(11);
-    doc.text('TONG KET', 14, tableEndY);
+    doc.text('TỔNG KẾT', 14, tableEndY);
+    doc.setFont(fontName, 'normal');
 
     if (activeReport === 'hr') {
       doc.setFontSize(9);
-      doc.text('Tong nhan vien: ' + employees.length, 14, tableEndY + 7);
-      doc.text('Dang lam viec: ' + activeCount, 14, tableEndY + 13);
-      doc.text('Nghi viec: ' + inactiveCount, 14, tableEndY + 19);
+      doc.text('Tổng nhân viên: ' + employees.length, 14, tableEndY + 7);
+      doc.text('Đang làm việc: ' + activeCount, 14, tableEndY + 13);
+      doc.text('Nghỉ việc: ' + inactiveCount, 14, tableEndY + 19);
     } else if (activeReport === 'payroll') {
       doc.setFontSize(9);
-      doc.text('Tong chi luong: ' + Number(totalSalary).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 7);
-      doc.text('Luong trung binh: ' + Number(avgSalary).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 13);
-      doc.text('So phieu luong: ' + salaries.length, 14, tableEndY + 19);
+      doc.text('Tổng chi lương: ' + Number(totalSalary).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 7);
+      doc.text('Lương trung bình: ' + Number(avgSalary).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 13);
+      doc.text('Số phiếu lương: ' + salaries.length, 14, tableEndY + 19);
     } else if (activeReport === 'attendance') {
       doc.setFontSize(9);
-      doc.text('Tong ngay cong: ' + totalWorkDays, 14, tableEndY + 7);
-      doc.text('Tong ngay vang: ' + totalAbsent, 14, tableEndY + 13);
-      doc.text('Tong ngay nghi: ' + totalLeave, 14, tableEndY + 19);
-      doc.text('Ty le nghi: ' + leaveRate + '%', 14, tableEndY + 25);
+      doc.text('Tổng ngày công: ' + totalWorkDays, 14, tableEndY + 7);
+      doc.text('Tổng ngày vắng: ' + totalAbsent, 14, tableEndY + 13);
+      doc.text('Tổng ngày nghỉ: ' + totalLeave, 14, tableEndY + 19);
+      doc.text('Tỷ lệ nghỉ: ' + leaveRate + '%', 14, tableEndY + 25);
     } else if (activeReport === 'dividend') {
       doc.setFontSize(9);
-      doc.text('Tong tien co tuc: ' + Number(totalDividend).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 7);
-      doc.text('Trung binh: ' + Number(avgDividend).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 13);
-      doc.text('So luot nhan: ' + dividends.length, 14, tableEndY + 19);
+      doc.text('Tổng tiền cổ tức: ' + Number(totalDividend).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 7);
+      doc.text('Trung bình: ' + Number(avgDividend).toLocaleString('vi-VN') + ' VND', 14, tableEndY + 13);
+      doc.text('Số lượt nhận: ' + dividends.length, 14, tableEndY + 19);
+      let yOffset = tableEndY + 30;
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(10);
+      doc.text('Cổ tức theo phòng ban:', 14, yOffset);
+      doc.setFont(fontName, 'normal');
+      yOffset += 7;
+      doc.setFontSize(9);
+      Object.entries(divByDept).forEach(([dept, total]) => {
+        const deptLabel = fontName === 'Roboto' ? dept : sanitizeForPDF(dept);
+        doc.text(`${deptLabel}: ${Number(total).toLocaleString('vi-VN')} VND`, 14, yOffset);
+        yOffset += 6;
+      });
     }
 
     doc.save(`${title.replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+
   };
 
   if (loading) return <div className="text-center py-5 text-muted">⏳ Đang tải dữ liệu báo cáo...</div>;
@@ -322,7 +373,6 @@ function ReportCenter() {
               <div style={{ fontSize: 32, marginBottom: 8 }}>{r.icon}</div>
               <h6 style={{ fontWeight: 700, fontSize: 14 }}>{r.title}</h6>
               <p className="text-muted mb-1" style={{ fontSize: 12 }}>{r.desc}</p>
-              <span className="badge-status" style={{ background: 'rgba(79,70,229,0.1)', color: '#4f46e5', fontSize: 10 }}>{r.role}</span>
             </div>
           </div>
         ))}
@@ -333,8 +383,34 @@ function ReportCenter() {
         <div className="card-header-custom">
           <h5>📈 {reports.find(r => r.key === activeReport)?.title}</h5>
           <div className="d-flex gap-2">
-            <button className="btn btn-primary-custom btn-sm" onClick={handleExportExcel}>📥 Xuất Excel</button>
-            <button className="btn btn-outline-secondary btn-sm" onClick={handleExportPDF}>📄 Xuất PDF</button>
+            <button
+              className="btn btn-sm d-flex align-items-center gap-2"
+              style={{ background: '#217346', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, padding: '7px 16px', fontSize: 13, boxShadow: '0 2px 8px rgba(33,115,70,0.18)' }}
+              onClick={handleExportExcel}
+            >
+              {/* Excel icon */}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15"/>
+                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9"/>
+                <path d="M14 2v6h6" fill="white" fillOpacity="0.5"/>
+                <text x="5" y="19" fontSize="8" fontWeight="bold" fill="#217346">XLS</text>
+              </svg>
+              Xuất Excel
+            </button>
+            <button
+              className="btn btn-sm d-flex align-items-center gap-2"
+              style={{ background: '#e53935', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, padding: '7px 16px', fontSize: 13, boxShadow: '0 2px 8px rgba(229,57,53,0.18)' }}
+              onClick={handleExportPDF}
+            >
+              {/* PDF icon */}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15"/>
+                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9"/>
+                <path d="M14 2v6h6" fill="white" fillOpacity="0.5"/>
+                <text x="5" y="19" fontSize="8" fontWeight="bold" fill="#e53935">PDF</text>
+              </svg>
+              Xuất PDF
+            </button>
           </div>
         </div>
         <div className="p-4">
