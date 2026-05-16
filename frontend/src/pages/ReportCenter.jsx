@@ -80,7 +80,9 @@ function ReportCenter() {
     const d = e.Department || 'Chưa phân bổ';
     empByDept[d] = (empByDept[d] || 0) + 1;
   });
-  const activeCount = employees.filter(e => (e.Status || 'Active') === 'Active').length;
+
+  const ACTIVE_STATUSES = ['Đang làm việc', 'Thử việc', 'Thực tập', 'Nghỉ phép'];
+  const activeCount = employees.filter(e => ACTIVE_STATUSES.includes(e.Status)).length;
   const inactiveCount = employees.length - activeCount;
 
   // Payroll report data
@@ -390,9 +392,9 @@ function ReportCenter() {
             >
               {/* Excel icon */}
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15"/>
-                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9"/>
-                <path d="M14 2v6h6" fill="white" fillOpacity="0.5"/>
+                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15" />
+                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9" />
+                <path d="M14 2v6h6" fill="white" fillOpacity="0.5" />
                 <text x="5" y="19" fontSize="8" fontWeight="bold" fill="#217346">XLS</text>
               </svg>
               Xuất Excel
@@ -404,9 +406,9 @@ function ReportCenter() {
             >
               {/* PDF icon */}
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15"/>
-                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9"/>
-                <path d="M14 2v6h6" fill="white" fillOpacity="0.5"/>
+                <rect width="24" height="24" rx="4" fill="#fff" fillOpacity="0.15" />
+                <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="white" fillOpacity="0.9" />
+                <path d="M14 2v6h6" fill="white" fillOpacity="0.5" />
                 <text x="5" y="19" fontSize="8" fontWeight="bold" fill="#e53935">PDF</text>
               </svg>
               Xuất PDF
