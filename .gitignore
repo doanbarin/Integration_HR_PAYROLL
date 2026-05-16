@@ -4,23 +4,18 @@
 backend/config.py
 backend/__pycache__/
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
+*.bak
 .env
 
 # ========================
 # Node / Frontend
 # ========================
 package-lock.json
-backend/config.py
-__pycache__/
-backend/__pycache__/
-*.pyc
-*.py[cod]
-*$py.class
-*.bak
-.env
 node_modules/
 frontend/node_modules/
 frontend/.cache/
@@ -32,4 +27,3 @@ frontend/build/
 .DS_Store
 Thumbs.db
 *.log
-
